@@ -66,6 +66,7 @@ def make_client():
     c.heard = False
     c.mute_audio = False
     c.listen_after_reply = False
+    c.powering_off = False
     c.reply_samples = c.reply_packets = c.muted_packets = 0
     c.recognised = 0
     c.threads, c.entry, c.models = {}, None, {'current': None, 'options': []}

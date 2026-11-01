@@ -544,6 +544,26 @@ async function renderIp() {
   $('ipSub').textContent = ip ? `在同一网络的电脑上打开 http://${ip}:16688/admin 进网关后台` : '连上 WiFi 后这里显示设备的地址';
 }
 $('btnSettings').addEventListener('click', () => { $('settings').classList.add('on'); renderIp(); });
+
+// 关机: halts the system (it stays dark with the power cable in), so unplugging can't damage it
+let powerArmed = 0;
+function renderPower() {
+  $('powerBtn').textContent = Date.now() - powerArmed < 5000 ? '确认关机' : '关机';
+  $('powerBtn').classList.toggle('armed', Date.now() - powerArmed < 5000);
+}
+$('powerBtn').addEventListener('click', async () => {
+  if (Date.now() - powerArmed > 5000) {
+    powerArmed = Date.now();
+    renderPower();
+    setTimeout(renderPower, 5100);
+    return toast('关机后要拔掉电源，等 30 秒再插上才会开机，再点一下「确认关机」');
+  }
+  powerArmed = 0;
+  renderPower();
+  if (DEMO !== null) return toast('演示模式不会真的关机');
+  const r = await (await post('/api/power-off', {}))?.json?.();
+  if (!r || !r.ok) toast((r && r.error) || '没能关机', 'error');
+});
 $('settingsClose').addEventListener('click', () => $('settings').classList.remove('on'));
 $('reportPill').addEventListener('click', () => { post('/api/reports/play'); toast('马上念给你听'); });
 
@@ -698,6 +718,9 @@ const handlers = {
     if (s.update) { ui.version = s.version; ui.update = s.update; }   // the demo's snapshots have none
     renderModels(); renderThread(); renderStatus();
     updateFinished((s.update || {}).job);
+  },
+  power(p) {
+    $('powerOff').classList.toggle('on', p.state === 'off');
   },
   update(u) {
     ui.update = u;

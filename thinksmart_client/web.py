@@ -92,6 +92,9 @@ def make_app(client: Client):
     async def health(_request):
         return web.json_response({'version': __version__, **client.health()})
 
+    async def power_off(_request):
+        return web.json_response(await client.power_off())
+
     async def network(_request):
         return web.json_response({'ip': local_ip()})
 
@@ -128,6 +131,7 @@ def make_app(client: Client):
     app.router.add_post('/api/history/clear', clear_history)
     app.router.add_get('/api/health', health)
     app.router.add_get('/api/network', network)
+    app.router.add_post('/api/power-off', power_off)
     app.router.add_post('/api/update/check', update_check)
     app.router.add_post('/api/update/install', update_install)
     app.router.add_static('/static/', WEB)

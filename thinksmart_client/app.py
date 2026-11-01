@@ -35,7 +35,7 @@ from pathlib import Path
 import aiohttp
 import numpy as np
 
-from . import config, mcp, sleep, wake_verify
+from . import config, mcp, sleep, update, wake_verify
 from .audio import OUT_RATE, Audio, load_wav
 from .device import DIM_LEVEL, Keys, Screen, normalize_screen_off
 from .hub import Hub
@@ -50,6 +50,13 @@ ROOT = Path(__file__).resolve().parent.parent
 # under it, the mic closed after 10 s while the user was mid-sentence and the hub never got the
 # end of it. Room noise here is ~-57 dBFS.
 SPEECH_RMS = 0.005
+# halt, not poweroff: with the power cable in, the board powers straight back on after a poweroff;
+# halted it stays dark with the file systems unmounted, so the cable can be pulled safely
+HALT = ('sudo', '-n', 'systemctl', 'halt')
+HALT_AFTER = 3           # seconds to read "正在关机 … 等 10 秒再拔" before the screen goes dark
+UPDATE_BUSY = ('preparing', 'downloading', 'installing', 'testing', 'rolling_back')
+# installing for a page request, or finishing an interrupted one at boot (self-test, rollback)
+UPDATE_UNITS = ('thinksmart-update-run.service', 'thinksmart-update-boot.service')
 MAX_LISTEN = 60          # seconds: one wake never keeps the mic open longer (a TV could otherwise)
 RECOGNITION_WAIT = 15    # seconds to wait for the hub's text after the user stops (long sentences)
 NORMAL_STOP_TAIL = 0.6   # a normal "tts stop" leaves less than this queued; more means aborted
@@ -159,6 +166,7 @@ class Client:
         self.listen_since = 0.0       # monotonic: when this wake started listening
         self.listen_mode = None       # 'realtime' (the hub's VAD ends it) or 'manual' (push-to-talk)
         self.ptt_held = False         # the mic button is held down (push-to-talk)
+        self.powering_off = False     # 关机 was confirmed: the halt is on its way
         self.awaiting_text = False    # the user spoke, the mic is closed, the hub is still recognising
         self.recognising = False      # the hub heard the user stop (its VAD) and is recognising, mic still open
         self.hub_pending = False      # the hub said "vad end" and hasn't answered it yet (text or "empty")
@@ -777,6 +785,49 @@ class Client:
         self.history_loaded = True
         self.events.publish('thread', {'entry': self.view_entry(), 'messages': self.threads.get(self.view_entry(), []),
                                        'reset': True})
+
+    async def power_off(self):
+        """The settings' 关机: end any conversation and halt, so the power can be unplugged without
+        leaving /boot (ext2, mounted read-write) to be repaired on the next boot."""
+        if self.powering_off:
+            return {'ok': True}   # a second tap while the first one is still on its way
+        job = update.read().get('job') or {}
+        if job.get('state') in UPDATE_BUSY and await self._update_running():
+            return {'ok': False, 'error': '正在更新，更新完再关机'}
+        self.powering_off = True
+        self.events.publish('power', {'state': 'off'})   # cover the page before ending a conversation (up to 3 s)
+        if self.hub.connected:
+            await self.end()
+        asyncio.create_task(self._halt())
+        return {'ok': True}
+
+    async def _update_running(self):
+        """The status file can be left saying "downloading" when the updater was killed (its 3 h limit).
+        Both units are oneshot: while they run they are "activating", which is-active's exit code
+        doesn't count as running, so read the states it prints."""
+        try:
+            p = await asyncio.create_subprocess_exec('systemctl', 'is-active', *UPDATE_UNITS,
+                                                     stdout=asyncio.subprocess.PIPE)
+            out, _ = await p.communicate()
+        except OSError:
+            return True
+        return any(s in ('active', 'activating', 'reloading', 'deactivating') for s in out.decode().split())
+
+    async def _halt(self):
+        await asyncio.sleep(HALT_AFTER)
+        log.info('halting the system (关机 in the settings)')
+        try:
+            p = await asyncio.create_subprocess_exec(*HALT, stdout=asyncio.subprocess.DEVNULL,
+                                                     stderr=asyncio.subprocess.PIPE)
+            _, err = await p.communicate()
+            failed = p.returncode != 0 and (err.decode(errors='replace').strip() or f'exit {p.returncode}')
+        except OSError as e:
+            failed = str(e)
+        if failed:
+            log.error('cannot halt: %s', failed)
+            self.powering_off = False
+            self.events.publish('power', {'state': 'failed'})
+            self.events.publish('toast', {'kind': 'error', 'text': '没能关机，请稍后再试'})
 
     async def clear_history(self, memory_only=False):
         """Clear every model's conversation on the hub (and the page). memory_only: just the summary

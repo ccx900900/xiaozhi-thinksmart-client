@@ -312,6 +312,11 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 #brightNote { margin: 0; }
 
 /* ---- overlays ---- */
+.power-off { position: fixed; z-index: 40; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+             gap: 18px; background: #04060d; color: var(--ink2); }
+.power-off.on { display: flex; }
+.power-off b { font-size: 44px; font-weight: 700; color: #fff; }
+.power-off span { font-size: 24px; }
 .toast { position: fixed; z-index: 30; left: 50%; top: 104px; display: flex; align-items: center; gap: 12px; max-width: 760px;
          transform: translate(-50%, -16px); opacity: 0; pointer-events: none; padding: 16px 26px; border-radius: 20px; font-size: 20px;
          background: #182046; border: 1px solid #ffffff26; box-shadow: 0 14px 40px #0009; transition: transform .25s, opacity .25s; }
