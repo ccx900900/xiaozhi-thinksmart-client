@@ -695,6 +695,10 @@ class Client:
         if not self.listen_after_reply or not self.hub.connected:
             return   # woken, aborted or ended meanwhile: that already decided what comes next
         self.listen_after_reply = False
+        if not self.keys.mic_on:
+            # switched off during the reply: nothing would be heard, don't show "listening"
+            self.set_state('idle')
+            return
         recognised = self.recognised
         await self.start_listening('realtime')
         if self.recognised != recognised:

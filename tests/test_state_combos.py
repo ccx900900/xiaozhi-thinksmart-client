@@ -129,3 +129,31 @@ async def test_report_after_an_abort_on_the_same_connection_is_heard():
     await c._on_json({'type': 'tts', 'state': 'sentence_start', 'text': '孙悟空做完了：故事讲完了'})
     assert not c.mute_audio and c.state == 'speaking'
     assert c.threads[None][-1]['text'] == '孙悟空做完了：故事讲完了'
+
+
+@pytest.mark.asyncio
+async def test_mic_switched_off_during_reply_ends_in_idle():
+    c = make_client()
+    await test_barge_in.ask(c)
+    c._on_audio(test_barge_in.PACKET)
+    c.keys.mic_on = False                   # privacy switch flipped during the reply
+    c._on_mic(False)
+    await c._on_json({'type': 'tts', 'state': 'stop'})
+    test_barge_in.play(c, 0.1)
+    await asyncio.sleep(0.1)
+    assert not c.uploading and c.state == 'idle' and not c.listen_after_reply
+
+
+@pytest.mark.asyncio
+async def test_mic_switched_off_and_on_again_during_reply_still_listens():
+    c = make_client()
+    await test_barge_in.ask(c)
+    c._on_audio(test_barge_in.PACKET)
+    c.keys.mic_on = False
+    c._on_mic(False)
+    c.keys.mic_on = True
+    c._on_mic(True)
+    await c._on_json({'type': 'tts', 'state': 'stop'})
+    test_barge_in.play(c, 0.1)
+    await asyncio.sleep(0.1)
+    assert c.uploading and c.state == 'listening'
