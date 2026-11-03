@@ -18,13 +18,10 @@ DEFAULTS = {
     'device_id': '',      # filled from the Wi-Fi MAC; the hub remembers the model per device id
     'client_id': '',
     # sherpa-onnx keywords: pinyin initials/finals with tones, then @label
-    # 2026-10-31: renamed 小二 -> 小麦. Tested with 10 edge-tts voices x 3 speeds: 小麦小麦 and
-    # 哈喽小麦 30/30 each, no false wakes on 20 confusable sentences x 10 voices (小麦色, 小卖部,
-    # 晓梅...). 小麦 alone woke on nearly every sentence containing it. 小麦同学 added the same day:
-    # 30/30, the other two unchanged, 1/10 false wake on 小美同学. 你好小麦 left out: 你好小妹 woke it
-    # 8-9/10 at any threshold (the model can't tell 麦 from 妹 there).
-    'wake_words': ['x iǎo m ài x iǎo m ài @小麦小麦', 'h ā l óu x iǎo m ài @哈喽小麦',
-                   'x iǎo m ài t óng x ué @小麦同学'],
+    # 2026-11-03: Mandarin wake name is 小舒. 舒 is first tone, token `sh ū` (models/kws-zh/tokens.txt).
+    # Primary 小舒小舒; the same two variants as before, 哈喽小舒 and 小舒同学.
+    'wake_words': ['x iǎo sh ū x iǎo sh ū @小舒小舒', 'h ā l óu x iǎo sh ū @哈喽小舒',
+                   'x iǎo sh ū t óng x ué @小舒同学'],
     'kws_score': 2.0,
     'kws_threshold': 0.25,
     # beam width: with 2 a keyword easily loses its path before it is finished (哈喽阿满 woke only
@@ -35,7 +32,7 @@ DEFAULTS = {
     'kws_gain_db': 10,
     # second look at each wake word hit (wake_verify.py): 'hub' asks the hub's speech recogniser
     # whether the wake word is really there, '' trusts the wake word model. Off for now: the hub
-    # takes 2-2.5 s here, which delays the answer to "小麦小麦今天天气怎么样" said in one go by ~4 s
+    # takes 2-2.5 s here, which delays the answer to "小舒小舒今天天气怎么样" said in one go by ~4 s
     'wake_verify': '',
     'follow_up_seconds': 10,   # after a reply: keep listening this long for a follow-up
     'port': 8090,

@@ -1,19 +1,19 @@
 """Second look at a wake word hit: recognise the last few seconds and check the wake word is really there.
 
 The wake word model (kws.py) is small and tuned to catch the wake word easily, so it also fires on
-things that sound close (小妹小妹, 小白同学, 小美同学). On a hit, the audio it heard goes to a full
+things that sound close. On a hit, the audio it heard goes to a full
 speech recogniser and the text is compared with the wake words by sound (toneless pinyin). The last
-syllable of the name (麦 of 小麦, the part all wake words share) must sound exactly right: 小卖 and
-笑麦 count, 小美, 小妹 and 小白 don't. Other syllables may be off by one, or by two half-wrong ones
-(same initial or same final): the recogniser writes 哈喽小麦 as 还有小麦 or Hello 小麦, and 小麦小麦
-as 洗了麦小麦. In order:
-1. a wake word, or just the name 小麦, is in the text -> wake (from far away or over a TV the
-   recogniser often gets only the second 小麦 of 小麦小麦);
-2. something shaped like a wake word with the wrong name (小妹小妹, 小白同学) -> ignore;
+syllable of the name (舒 of 小舒, the part all wake words share) must sound exactly right. Other
+syllables may be off by one, or by two half-wrong ones
+(same initial or same final): the recogniser often rewrites 哈喽小舒, or 小舒小舒 with a wrong first
+half. In order:
+1. a wake word, or just the name 小舒, is in the text -> wake (from far away or over a TV the
+   recogniser often gets only the second 小舒 of 小舒小舒);
+2. something shaped like a wake word with the wrong name -> ignore;
 3. hardly anything recognised (3 syllables or less) -> wake: the recogniser is unsure, not the
    wake word model wrong, and a missed wake is worse than a false one;
 4. other speech -> ignore.
-Measured with eval/wake (synthetic voices): false wakes on confusable sentences 29 -> 6, true
+Measured with eval/wake (synthetic voices, previous keyword set): false wakes on confusable sentences 29 -> 6, true
 wakes lost: 1% near, 5% across the room, 11% with a TV talking.
 The audio is brought to a normal speaking level first: like the wake word model, the recogniser
 does worse on quiet audio.
@@ -97,7 +97,7 @@ class Matcher:
         self.slack = slack
 
     def _cost(self, heard, label, wrong_name):
-        """Lowest mismatch of label against any stretch of heard; wrong_name: cost of a wrong 麦."""
+        """Lowest mismatch of label against any stretch of heard; wrong_name: cost of a wrong 舒."""
         want = pinyin(label)
         strict = [bool(self.name) and ch == self.name[-1] for ch in label]
         best = 99.0
@@ -192,7 +192,7 @@ class Verifier:
         recogniser can't be asked, the wake counts (a missed wake is worse than a false one)."""
         t0 = time.monotonic()
         # the hit comes right as the wake word ends; without some silence after it the recogniser
-        # lacks right context for the last syllable (小麦小麦 came out as 洗澡麦洗脚麦)
+        # lacks right context for the last syllable (小舒小舒 came out garbled without the trailing silence)
         loudest = max(np.sqrt(np.mean(audio[i:i + 1600] ** 2)) for i in range(0, max(len(audio) - 1599, 1), 800))
         audio = np.concatenate([audio * min(LEVEL / max(loudest, 1e-6), MAX_GAIN), np.zeros(TAIL)]).astype(np.float32)
         try:

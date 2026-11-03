@@ -59,7 +59,7 @@ async def test_ptt_held_too_long_is_stopped(monkeypatch):
 @pytest.mark.asyncio
 async def test_report_read_during_the_listening_window_closes_the_mic():
     c = make_client()
-    await c.wake('voice')                   # "小麦小麦" because the page said a report is waiting
+    await c.wake('voice')                   # "小舒小舒" because the page said a report is waiting
     # the hub reads it on its own: reports.speak -> speak_txt sends no stt and no "tts start"
     await c._on_json({'type': 'tts', 'state': 'sentence_start', 'text': '孙悟空：日志查完了'})
     assert c.state == 'speaking'

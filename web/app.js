@@ -28,7 +28,7 @@ function renderStatus() {
   const shown = ui.ptt ? 'listening' : state;
   document.body.dataset.state = shown;
   const text = {
-    idle: ['说<em>「小麦小麦」</em>', connected ? '对话还保留着，唤醒后可以接着聊' : '或者点下面的麦克风；按住可以直接说'],
+    idle: ['说<em>「小舒小舒」</em>', connected ? '对话还保留着，唤醒后可以接着聊' : '或者点下面的麦克风；按住可以直接说'],
     connecting: ['正在连接…', '连上小智网关后就开始听'],
     listening: ui.ptt ? ['松开发送', '说完松开手指'] : ['我在听', '说完停一下我就开始回答'],
     thinking: [`${esc(modelName())} 正在思考…`, '复杂的问题可能要想一会儿'],
@@ -98,7 +98,7 @@ function renderThread() {
   const box = $('messages');
   box.textContent = '';
   if (!ui.thread.messages.length) {
-    box.innerHTML = `<div class="empty"><div class="big">说「小麦小麦」开始聊天</div><div class="tips">
+    box.innerHTML = `<div class="empty"><div class="big">说「小舒小舒」开始聊天</div><div class="tips">
       <div class="tip">「今天北京天气怎么样？」</div>
       <div class="tip">「嗨 Claude，帮我想个周末计划」</div>
       <div class="tip">「把音量调小一点」</div></div></div>`;

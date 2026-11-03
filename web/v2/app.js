@@ -40,11 +40,12 @@ function tick() {
    All bars are drawn on one canvas: as 48 elements, restyling them 30 times a second kept
    the device's main thread at ~93% and the page at ~17 fps. */
 const BARS = 48, R_IN = 110, BAR_W = 6, REST = 8, REACH = 46;   // px; REST + REACH stays inside the canvas
+const coronaHost = $('corona');   // absent on v2: role B is a CSS image swap, this canvas is the GPU test page only
 const corona = document.createElement('canvas');
 const CSIZE = 330, DPR = Math.min(2, window.devicePixelRatio || 1);
 corona.width = corona.height = CSIZE * DPR;
 corona.style.width = corona.style.height = '100%';
-$('corona').appendChild(corona);
+if (coronaHost) coronaHost.appendChild(corona);
 const cx = corona.getContext('2d');
 const ANG = Array.from({ length: BARS }, (_, i) => i / BARS * Math.PI * 2);
 const COS = ANG.map(Math.cos), SIN = ANG.map(Math.sin);
@@ -118,7 +119,43 @@ const micLevel = rms => Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-6) - M
 const STILL = document.documentElement.classList.contains('still');
 const level = { target: 0, value: 0, phase: 0, raf: 0, last: 0, state: '', since: 0, mix: 1 };
 const isLive = s => s === 'listening' || s === 'speaking';
+// v2 has no corona: keep the mic ring and the listening wave moving, and leave the character to CSS.
+function drawRing(v, p) {
+  const ring = $('micRing');
+  if (ring) ring.style.transform = level.state === 'listening' ? `scale(${(1 + v * .16).toFixed(3)})` : '';
+  const pending = $('pending');
+  if (pending) pending.querySelectorAll('.wave b').forEach((b, i) => {
+    b.style.transform = `scaleY(${(.18 + v * (.5 + .5 * Math.sin(p * 3 + i * 1.3))).toFixed(3)})`;
+  });
+}
+function setRingState(state) {
+  if (state === level.state) return;
+  level.state = state;
+  if (!isLive(state)) level.target = 0;
+  if (STILL) { drawRing(isLive(state) ? .7 : 0, 1.2); return; }
+  if (!level.raf) {
+    level.last = performance.now() - 34;
+    level.raf = requestAnimationFrame(ringLoop);
+  }
+}
+function ringLoop(now) {
+  level.raf = requestAnimationFrame(ringLoop);
+  if (now - level.last < 33) return;
+  const dt = Math.min(.1, (now - level.last) / 1000);
+  level.last = now;
+  level.value += (level.target - level.value) * (level.target > level.value ? .55 : .2);
+  level.phase += dt * 2.4;
+  if (isLive(level.state) || level.value > 0.02) drawRing(level.value, level.phase);
+  else {
+    cancelAnimationFrame(level.raf);
+    level.raf = 0;
+    level.target = level.value = 0;
+    const ring = $('micRing');
+    if (ring) ring.style.transform = '';
+  }
+}
 function setCorona(state) {
+  if (!coronaHost) return setRingState(state);
   if (state === level.state) return;
   // morph from what is on screen; a spinning corona is turned by CSS, so carry its angle into the bars
   const m = getComputedStyle($('corona')).transform.match(/matrix\(([^,]+),\s*([^,]+)/);
@@ -188,11 +225,11 @@ function renderStatus() {
   const shown = shownState();
   document.body.dataset.state = shown;
   const text = {
-    idle: ['说<em>「小麦小麦」</em>', connected ? '对话还在，唤醒后可以接着聊' : '或者点麦克风；按住可以直接说'],
+    idle: ['说<em>「小舒小舒」</em>', connected ? '对话还在，唤醒后可以接着聊' : '或者点麦克风；按住可以直接说'],
     connecting: ['正在连接…', '连上小智网关后就开始听'],
     listening: ui.ptt ? ['松开<em>发送</em>', '说完松开手指'] : ['我在听', '说完停一下，我就开始回答'],
     thinking: [`<em>${esc(modelName())}</em> 正在思考`, '复杂的问题可能要想一会儿'],
-    speaking: ['正在回答', '喊「小麦小麦」或点打断就能停下'],
+    speaking: ['正在回答', '喊「小舒小舒」或点打断就能停下'],
   }[shown] || ['', ''];
   if (ui.status.recognising && !ui.ptt) text.splice(0, 2, '正在识别', '你说完了，正在把话转成文字');
   const micOff = ui.status.mic === false;
@@ -203,7 +240,7 @@ function renderStatus() {
   document.body.classList.toggle('sleeping', sleeping);
   $('reportText').textContent = reports > 1 ? `有 ${reports} 条待汇报` : '有一条待汇报';
   if (micOff && shown === 'idle') text.splice(0, 2, '麦克风已关', '拨开机身侧面的开关就能说话');
-  else if (reports && shown === 'idle') text[1] = '有待汇报：点右上角收听，或叫一声「小麦小麦」';
+  else if (reports && shown === 'idle') text[1] = '有待汇报：点右上角收听，或叫一声「小舒小舒」';
   else if (sleeping && shown === 'idle' && !connected) text[1] = '睡眠时段：汇报不会自动念';
   $('title').innerHTML = text[0];
   $('hint').textContent = text[1];
@@ -333,7 +370,7 @@ function renderBright() {
   $('brightRange').style.setProperty('--fill', b.level + '%');
   $('brightNum').textContent = b.level + '%';
   $('brightNote').textContent = b.dimmed ? '睡眠时段内屏幕调暗了；拖一下滑条，这次时段就按你调的亮度'
-    : '熄屏再亮也保持这个亮度；也可以说「小麦小麦，屏幕亮一点」「调到最亮」';
+    : '熄屏再亮也保持这个亮度；也可以说「小舒小舒，屏幕亮一点」「调到最亮」';
 }
 async function sendBright(body) {
   if (DEMO) { ui.status.brightness = { level: body.level, dimmed: false }; return; }
@@ -874,7 +911,7 @@ const demo = DEMO === null ? null : (() => {
     ['volume', 2400, () => showVolume(60)],
     ['ptt', 2600, () => { pttStart(); state('listening'); }],
     [null, 400, () => { pttEnd(); say('user', '用一句话介绍一下你自己'); state('thinking'); }],
-    [null, 1800, () => sentence('我是小麦，住在这块屏幕里的语音助手，有问题随时叫我。')],
+    [null, 1800, () => sentence('我是小舒，住在这块屏幕里的语音助手，有问题随时叫我。')],
     [null, 3200, () => { done(); state('idle'); }],
     [null, 3000, () => { state('idle', false); toast('对话已结束，聊天记录已保存'); }],
   ];

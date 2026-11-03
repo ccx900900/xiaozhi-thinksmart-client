@@ -1,6 +1,7 @@
 /* ThinkSmart voice client v2. 1280×800 landscape, viewed from 0.5–2 m.
-   GPU notes (Adreno 506): only transform/opacity animate; glows are static gradients that cross-fade;
-   anything driven by the sound level is small (orb core, corona bars, mic ring). */
+   The character is role B: three 800×1280 frames on #0B1220, swapped by opacity.
+   GPU notes (Adreno 506): only transform/opacity animate; the idle cream pulse is a compositor
+   animation. Sound level only moves the mic ring (and the listening wave). */
 :root {
   --bg0: #050813; --bg1: #0b1128; --ink: #f2f5ff; --ink2: #b6c0e2; --ink3: #7883ab;
   --line: #ffffff17; --card: #ffffff0b; --card2: #ffffff14;
@@ -8,9 +9,9 @@
   --c1: #aab4e6; --c2: #5a66a8;
 }
 body[data-state="connecting"] { --c1: #ffd08a; --c2: #f0962e; }
-body[data-state="listening"]  { --c1: #7ff3ff; --c2: #19b4f0; }
-body[data-state="thinking"]   { --c1: #e2a8ff; --c2: #9b5cff; }
-body[data-state="speaking"]   { --c1: #a6c8ff; --c2: #5872ff; }
+body[data-state="listening"]  { --c1: #4CC9F0; --c2: #1a9ec8; }
+body[data-state="thinking"]   { --c1: #4CC9F0; --c2: #1a9ec8; }
+body[data-state="speaking"]   { --c1: #FF9F6B; --c2: #e07a45; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
@@ -64,8 +65,33 @@ button { font: inherit; color: inherit; border: 0; background: none; padding: 0;
 /* ---- main ---- */
 .main { display: grid; grid-template-columns: 452px 1fr; gap: 40px; min-height: 0; }
 
-/* ---- stage: the orb ---- */
+/* ---- stage: role B, native 800×1280 canvas on #0B1220 ---- */
 .stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0; padding-bottom: 6px; }
+.pet { position: relative; width: 255px; height: 408px; margin-bottom: 10px; flex: none; background: #0B1220;
+       border-radius: 22px; overflow: hidden; }
+.pet-frame { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0;
+             transition: opacity .45s ease; pointer-events: none; }
+/* idle frame also covers connecting; listen frame also covers thinking */
+.pet-idle { opacity: 1; }
+body[data-state="listening"] .pet-idle,
+body[data-state="thinking"] .pet-idle,
+body[data-state="speaking"] .pet-idle { opacity: 0; }
+body[data-state="listening"] .pet-listen,
+body[data-state="thinking"] .pet-listen { opacity: 1; }
+body[data-state="speaking"] .pet-speak { opacity: 1; }
+@keyframes pet-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.028); } }
+@keyframes cream-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px #f6e2c433, 0 12px 32px #f3d2a833; }
+  50% { box-shadow: 0 0 0 1px #ffe7c888, 0 16px 48px #ffd7a866; }
+}
+body[data-state="idle"] .pet-idle,
+body[data-state="connecting"] .pet-idle { animation: pet-breathe 2.4s ease-in-out infinite; }
+body[data-state="idle"] .pet,
+body[data-state="connecting"] .pet { animation: cream-pulse 2.4s ease-in-out infinite; }
+body[data-state="listening"] .pet,
+body[data-state="thinking"] .pet { box-shadow: 0 0 0 1px #4CC9F088, 0 14px 42px #4CC9F055; }
+body[data-state="speaking"] .pet { box-shadow: 0 0 0 1px #FF9F6B88, 0 14px 42px #FF9F6B55; }
+/* the GPU test page (web/test/v2b.html) still uses the old orb */
 .orb { position: relative; width: 330px; height: 330px; margin-bottom: 18px; }
 .glows { position: absolute; inset: -150px; pointer-events: none; }
 .glows i { position: absolute; inset: 0; opacity: 0; transition: opacity .7s ease; }

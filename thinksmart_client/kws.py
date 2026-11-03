@@ -29,7 +29,7 @@ RECENT = 3.0  # seconds of audio kept for a second look at a hit (wake_verify.py
 
 class Kws:
     def __init__(self, model_dir, keywords, score=2.0, threshold=0.25, paths=8, gain_db=0.0):
-        """keywords: lines like 'x iǎo m ài x iǎo m ài @小麦小麦'. gain_db: applied to what the model
+        """keywords: lines like 'x iǎo sh ū x iǎo sh ū @小舒小舒'. gain_db: applied to what the model
         hears (not to the quiet gate): the model misses more at low levels."""
         # sherpa-onnx only takes keywords from a file, and reads it here once
         with tempfile.NamedTemporaryFile('w', suffix='.txt') as kw_file:
