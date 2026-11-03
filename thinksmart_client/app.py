@@ -1207,12 +1207,15 @@ class Client:
         before = len(self.alarms.missed)
         items, notes = self.alarms.take_due(now, self.ring['items'] if self.ring else ())
         if items and self.ring:
-            self.ring['items'] += items     # due while another rings: they ring together
+            # due while another rings: they ring together, and the ring lasts its full time from now
+            self.ring['items'] += items
             self.ring['notes'] += notes
+            self.ring['joined'].append((time.monotonic(), all(i['kind'] == 'reminder' for i in items)))
+            log.info('joined the ring: %s', [(i['id'], i['kind'], i['label']) for i in items])
             self.publish_alarms()
         elif items:
             self.ring = {'items': items, 'notes': notes, 'started': now, 'volume': self.alarm_volume,
-                         'stop': asyncio.Event()}
+                         'stop': asyncio.Event(), 'joined': []}
             self.ring['task'] = asyncio.create_task(self._ringing(self.ring))
         elif len(self.alarms.missed) != before:
             self.publish_alarms()
@@ -1237,6 +1240,10 @@ class Client:
             end, reminder_end, round_over = start + alarms.RING_SECONDS, start + alarms.REMINDER_SECONDS, 0.0
             while True:
                 now = time.monotonic()
+                for at, only_reminders in ring['joined']:   # each one that joined rings its full time too
+                    end = max(end, at + (alarms.REMINDER_SECONDS if only_reminders else alarms.RING_SECONDS))
+                    if only_reminders:
+                        reminder_end = max(reminder_end, at + alarms.REMINDER_SECONDS)
                 # only reminders: the chime and their words a few times; an alarm or countdown among
                 # them: the tone over and over, up to RING_SECONDS
                 reminders = all(i['kind'] == 'reminder' for i in ring['items'])

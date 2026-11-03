@@ -664,3 +664,24 @@ async def test_a_failing_ring_does_not_break_the_wake_word(tmp_path, monkeypatch
     await ring_now(c)
     await c.wake('voice')                         # stop_alarm awaits the failed ring: no exception
     assert c.ring is None and sp.volume == 40 and c.state == 'listening'
+
+
+@pytest.mark.asyncio
+async def test_one_joining_a_ring_gets_its_full_time(tmp_path, monkeypatch):
+    Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(alarms, 'REMINDER_PAUSE', 0)
+    monkeypatch.setattr(alarms, 'REMINDER_SECONDS', 0.6)
+    monkeypatch.setattr(alarms, 'reminder_chime', lambda: np.full((4800, 2), 0.1, np.float32))
+    c.alarms.create('reminder', '喝水', seconds=60)
+    c.alarms.create('reminder', '晾衣服', seconds=60.4)
+    await ring_now(c)                                  # 喝水 rings (晾衣服 is 0.4 s later)
+    assert [i['label'] for i in c.ring['items']] == ['喝水']
+    await asyncio.sleep(0.4)
+    c.alarms.clock.go(0.4)
+    await c._alarm_tick(c.alarms.clock())              # 晾衣服 joins 0.4 s in
+    assert [i['label'] for i in c.ring['items']] == ['喝水', '晾衣服']
+    await asyncio.sleep(0.4)                           # 0.8 s: past 喝水's 0.6 s, inside 晾衣服's
+    assert c.ring is not None
+    await asyncio.sleep(0.5)
+    assert c.ring is None and sorted(m['label'] for m in c.alarms.missed) == ['喝水', '晾衣服']
