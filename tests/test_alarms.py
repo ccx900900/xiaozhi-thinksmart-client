@@ -775,3 +775,40 @@ def test_tone_files_decode_to_the_pieces():
         assert -24 < rms < -14 and np.abs(x).max() < 0.95, (name, rms)
     chime = alarms.reminder_chime()
     assert chime.shape[1] == 2 and 3 < len(chime) / OUT_RATE < 4
+
+
+@pytest.mark.asyncio
+async def test_stop_right_after_a_second_tap_stops_both(tmp_path, monkeypatch):
+    sp = Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    await c.preview_tone('marimba')
+    await asyncio.sleep(0.05)
+    first = c.preview
+    await c.preview_tone('marimba')   # the second one, not started yet
+    await c._stop_preview()            # cancels it before its first step
+    await asyncio.sleep(0.05)
+    assert first.done() and sp.volume == 40 and c.held_volume is None
+
+
+@pytest.mark.asyncio
+async def test_volume_key_just_as_a_ring_starts(tmp_path, monkeypatch):
+    sp = Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    c.alarms.create('alarm', time='07:00')
+    c.alarms.clock.go(60)
+    await c._alarm_tick(c.alarms.clock())
+    await c.volume_step(5)             # before the ring has switched the speaker
+    await asyncio.sleep(0.05)
+    assert sp.volume == 75             # the ring plays at its volume + the key
+    await c.stop_alarm()
+    assert sp.volume == 40 and c.alarm_volume == 70
+
+
+@pytest.mark.asyncio
+async def test_wake_word_stops_a_preview(tmp_path, monkeypatch):
+    sp = Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    await c.preview_tone('coffee')
+    await asyncio.sleep(0.05)
+    await c.wake('voice')
+    assert c.preview is None and sp.volume == 40 and c.state == 'listening'

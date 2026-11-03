@@ -86,7 +86,7 @@ def make_client():
     c.verifier = None
     c.speech_end = 0.0
     c.connecting = asyncio.Lock()
-    c.volume, c.ring = 60, None
+    c.volume, c.ring, c.preview = 60, None, None
 
     async def no_models():
         pass

@@ -424,6 +424,8 @@ class Client:
         self.screen.poke()
         if self.ring:
             await self.stop_alarm()   # the wake word stops a ring (no snooze: "再睡 10 分钟" is said next)
+        if self.preview:
+            await self._stop_preview()   # a tone being tried: the answer must not queue behind it
         if self.mic_off_toast():
             return
         if self.in_turn():
@@ -1006,7 +1008,9 @@ class Client:
                 if not self.ring:
                     return
                 self.ring['volume'] = max(0, min(100, self.ring['volume'] + delta))
-                await mcp.set_volume(self.ring['volume'])
+                if self.held_volume is not None:
+                    await mcp.set_volume(self.ring['volume'])
+                # else the ring hasn't switched the speaker yet: it will, to this volume (_hold_speaker)
             self.events.publish('volume', {'volume': self.ring['volume'], 'source': 'key', 'ring': True})
             return
         async with self.volume_lock:   # read and write as one step, or two quick presses make one
@@ -1026,9 +1030,11 @@ class Client:
             log.warning('cannot save the volume to put back: %s', e)
 
     async def _hold_speaker(self, level):
-        """Switch the speaker to `level` for a ring or a preview; the device volume is saved first, so
-        that a crash or a power cut in between still gets it back (_restore_volume)."""
+        """Switch the speaker to `level` (or level() read under the lock: a ring's volume the keys may
+        have changed meanwhile) for a ring or a preview; the device volume is saved first, so that a
+        crash or a power cut in between still gets it back (_restore_volume)."""
         async with self.volume_lock:
+            level = level() if callable(level) else level
             if self.held_volume is None:
                 before = await mcp.get_volume()
                 self.held_volume = before if before is not None else self.volume
@@ -1094,12 +1100,15 @@ class Client:
             raise ValueError(f'tone must be one of {list(alarms.TONES)}')
         if self.ring:
             return
-        # the new task stops the old one itself: two quick taps can't both start playing
-        self.preview = asyncio.create_task(self._play_preview(name, self.preview))
+        # cancel the old one now (a task cancelled before it first runs never would) and let the new
+        # one wait for it to put the volume back
+        previous = self.preview
+        if previous:
+            previous.cancel()
+        self.preview = asyncio.create_task(self._play_preview(name, previous))
 
     async def _play_preview(self, name, previous=None):
         if previous and not previous.done():
-            previous.cancel()
             await asyncio.wait([previous])   # not `await previous`: a cancel of this one must still stop it
         sound = alarms.tone(name)
         n = min(len(sound) - int(OUT_RATE * alarms.TONE_GAP), int(OUT_RATE * PREVIEW_SECONDS))
@@ -1251,7 +1260,7 @@ class Client:
             self.set_state('idle')
             self.screen.alarm(True)
             self.publish_alarms()
-            await self._hold_speaker(ring['volume'])
+            await self._hold_speaker(lambda: ring['volume'])
             note = asyncio.create_task(self._speech('，'.join(ring['notes']))) if ring['notes'] else None
             clips, phrase, chime = {}, None, None
             start = time.monotonic()
