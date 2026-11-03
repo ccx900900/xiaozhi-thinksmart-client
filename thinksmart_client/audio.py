@@ -137,8 +137,9 @@ class Player:
                     break
                 kept.append(c)
                 total += len(c)
-            if total <= keep:
+            if total <= keep and len(kept) == len(self._chunks):
                 return   # nothing beyond keep_seconds
+            # (total == keep with chunks after it: what is left of an earlier cut, then new sound to drop)
             kept[-1] = kept[-1][:len(kept[-1]) - (total - keep)]
             # fade out the last FADE samples of what is kept (they may span the ends of two chunks)
             down, left = _ramp(FADE)[::-1], FADE

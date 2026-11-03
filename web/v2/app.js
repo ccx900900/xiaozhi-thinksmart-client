@@ -560,7 +560,10 @@ $('tones').addEventListener('click', e => {
 $('missedClear').addEventListener('click', () => (DEMO ? handlers.alarms(Object.assign({}, ui.alarms, { missed: [] }))
                                                        : postJson('/api/alarms/missed/clear')));
 $('ringStop').addEventListener('click', () => post('/api/alarms/stop'));
-$('ringSnooze').addEventListener('click', () => { post('/api/alarms/snooze'); toast('好的，10 分钟后再叫你'); });
+$('ringSnooze').addEventListener('click', () => {
+  if (DEMO) return post('/api/alarms/snooze');
+  postJson('/api/alarms/snooze').then(r => { if (r.ok) toast('好的，10 分钟后再叫你'); });   // postJson shows the error
+});
 
 /* ---- settings: software update (update.py: the root updater installs, the page only asks) ---- */
 const UPD_STAGE = { preparing: '正在准备', downloading: '正在下载', installing: '正在安装',

@@ -342,15 +342,18 @@ class Alarms:
             item['at'] = (next_time(item['repeat'], item['time'], datetime.datetime.fromtimestamp(now)).timestamp()
                           if item['repeat'] else None)
 
-    def finish(self, items, started, answered, now=None):
-        """A ring is over: stopped by the user (answered) or given up on after RING_SECONDS."""
+    def finish(self, items, started, answered, now=None, fired=None):
+        """A ring is over: stopped by the user (answered) or given up on after RING_SECONDS. fired:
+        item id -> when it began ringing, for those that joined the ring after `started` (what came
+        due up to that moment is what rang)."""
         now = self.clock() if now is None else now
+        fired = fired or {}
         for item in items:
             if item not in self.items:
                 continue   # deleted while it rang
             if not answered:
                 self._note_missed(item, due(item) or started, 'unanswered', now)
-            self._advance(item, started, now)
+            self._advance(item, max(started, fired.get(item['id'], started)), now)
             item['rang'] = now
         self._purge(now)
         self.save()

@@ -981,15 +981,20 @@ class Client:
     async def set_volume(self, volume, source='page'):
         """The device volume (page, voice, keys). While a ring or a preview has the speaker, it is what
         comes back afterwards."""
-        volume = max(0, min(100, int(volume)))
         async with self.volume_lock:
-            if self.held_volume is not None:
-                self.held_volume = volume
-                self._write_ring_state()
-            else:
-                await mcp.set_volume(volume)
-        self.volume = volume
+            volume = await self._apply_volume(volume)
         self.events.publish('volume', {'volume': volume, 'source': source})
+        return volume
+
+    async def _apply_volume(self, volume):
+        """set_volume under volume_lock."""
+        volume = max(0, min(100, int(volume)))
+        if self.held_volume is not None:
+            self.held_volume = volume
+            self._write_ring_state()
+        else:
+            await mcp.set_volume(volume)
+        self.volume = volume
         return volume
 
     async def volume_step(self, delta):
@@ -1004,9 +1009,12 @@ class Client:
                 await mcp.set_volume(self.ring['volume'])
             self.events.publish('volume', {'volume': self.ring['volume'], 'source': 'key', 'ring': True})
             return
-        current = await self.device_volume()
-        if current is not None:
-            await self.set_volume(current + delta, 'key')
+        async with self.volume_lock:   # read and write as one step, or two quick presses make one
+            current = self.held_volume if self.held_volume is not None else await mcp.get_volume()
+            if current is None:
+                return
+            volume = await self._apply_volume(current + delta)
+        self.events.publish('volume', {'volume': volume, 'source': 'key'})
 
     def _ring_state_path(self):
         return self.alarms.dir / 'ring.json'
@@ -1086,10 +1094,13 @@ class Client:
             raise ValueError(f'tone must be one of {list(alarms.TONES)}')
         if self.ring:
             return
-        await self._stop_preview()
-        self.preview = asyncio.create_task(self._play_preview(name))
+        # the new task stops the old one itself: two quick taps can't both start playing
+        self.preview = asyncio.create_task(self._play_preview(name, self.preview))
 
-    async def _play_preview(self, name):
+    async def _play_preview(self, name, previous=None):
+        if previous and not previous.done():
+            previous.cancel()
+            await asyncio.wait([previous])   # not `await previous`: a cancel of this one must still stop it
         sound = alarms.tone(name)
         n = min(len(sound) - int(OUT_RATE * alarms.TONE_GAP), int(OUT_RATE * PREVIEW_SECONDS))
         sound = sound[:n].copy()                       # a piece: only its first seconds, faded out
@@ -1101,7 +1112,9 @@ class Client:
             await asyncio.sleep(n / OUT_RATE + 0.1)
         finally:
             self.audio.player.trim(0)
-            await self._release_speaker()
+            # cancelled (another tap, the settings closed, a ring) halfway through putting the volume
+            # back would leave the speaker at the alarm volume: let it finish
+            await asyncio.shield(self._release_speaker())
 
     async def _stop_preview(self):
         task, self.preview = self.preview, None
@@ -1111,6 +1124,8 @@ class Client:
                 await task
             except asyncio.CancelledError:
                 pass
+            async with self.volume_lock:
+                pass   # its shielded _release_speaker has put the volume back
 
     # ---- countdowns, alarms and reminders (alarms.py) ----
 
@@ -1204,18 +1219,21 @@ class Client:
             self.publish_alarms()
         if not synced:
             return
+        if self.ring and self.ring['closing']:
+            return   # the ring is ending: what is due now rings on its own once it has
         before = len(self.alarms.missed)
         items, notes = self.alarms.take_due(now, self.ring['items'] if self.ring else ())
         if items and self.ring:
             # due while another rings: they ring together, and the ring lasts its full time from now
             self.ring['items'] += items
             self.ring['notes'] += notes
+            self.ring['fired'].update((i['id'], now) for i in items)
             self.ring['joined'].append((time.monotonic(), all(i['kind'] == 'reminder' for i in items)))
             log.info('joined the ring: %s', [(i['id'], i['kind'], i['label']) for i in items])
             self.publish_alarms()
         elif items:
             self.ring = {'items': items, 'notes': notes, 'started': now, 'volume': self.alarm_volume,
-                         'stop': asyncio.Event(), 'joined': []}
+                         'stop': asyncio.Event(), 'joined': [], 'fired': {}, 'closing': False}
             self.ring['task'] = asyncio.create_task(self._ringing(self.ring))
         elif len(self.alarms.missed) != before:
             self.publish_alarms()
@@ -1282,10 +1300,11 @@ class Client:
             # whoever awaits this (stop_alarm from the wake word) must not fail with it
             log.exception('the ring failed')
         finally:
+            ring['closing'] = True   # nothing joins any more: it would be finished without having rung
             self.audio.player.trim(0)
             self.screen.alarm(False)
             await self._release_speaker()
-            self.alarms.finish(ring['items'], ring['started'], answered)
+            self.alarms.finish(ring['items'], ring['started'], answered, fired=ring['fired'])
             self.ring = None
             self.publish_alarms()
             self.set_state(self.state)

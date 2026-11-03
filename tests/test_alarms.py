@@ -685,3 +685,66 @@ async def test_one_joining_a_ring_gets_its_full_time(tmp_path, monkeypatch):
     assert c.ring is not None
     await asyncio.sleep(0.5)
     assert c.ring is None and sorted(m['label'] for m in c.alarms.missed) == ['喝水', '晾衣服']
+
+
+def test_one_that_joined_a_ring_is_done_when_it_ends(tmp_path):
+    """It came due after the ring began: its own time, not the ring's start, is what rang."""
+    clock = Clock(2026, 11, 3, 7, 0)
+    a = alarms.Alarms(tmp_path, clock)
+    first = a.create('alarm', minutes=1)
+    joined = a.create('timer', minutes=4)
+    rep = a.create('alarm', '吃药', time='07:03', repeat={'type': 'daily'})
+    clock.go(60)
+    ring, _ = a.take_due(clock())
+    started = clock()
+    clock.go(120)
+    ring2, _ = a.take_due(clock(), ringing=ring)      # 07:03 吃药 joins
+    clock.go(60)
+    ring3, _ = a.take_due(clock(), ringing=ring + ring2)   # 07:04 the timer joins
+    fired = {i['id']: clock() - 60 for i in ring2} | {i['id']: clock() for i in ring3}
+    clock.go(30)
+    a.finish(ring + ring2 + ring3, started, answered=True, fired=fired)
+    assert a.take_due(clock() + 1) == ([], [])          # nothing rings again
+    assert alarms.due(a.get(first['id'])) is None and alarms.due(a.get(joined['id'])) is None
+    assert at(a.get(rep['id'])['at']) == datetime.datetime(2026, 11, 4, 7, 3)
+
+
+@pytest.mark.asyncio
+async def test_joined_entry_rings_once_in_the_client(tmp_path, monkeypatch):
+    Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    c.alarms.create('alarm', '起床', seconds=60)
+    c.alarms.create('timer', '鸡蛋', seconds=120)
+    await ring_now(c)
+    c.alarms.clock.go(60)
+    await c._alarm_tick(c.alarms.clock())               # the timer joins
+    assert len(c.ring['items']) == 2
+    await c.stop_alarm()
+    c.alarms.clock.go(1)
+    await c._alarm_tick(c.alarms.clock())
+    assert c.ring is None and c.alarms.active() == []
+
+
+@pytest.mark.asyncio
+async def test_held_volume_keys_do_not_lose_steps(tmp_path, monkeypatch):
+    sp = Speaker(monkeypatch, 40)
+    orig_get = mcp.get_volume
+
+    async def slow_get():
+        await asyncio.sleep(0.01)
+        return await orig_get()
+    monkeypatch.setattr(mcp, 'get_volume', slow_get)
+    c = make_client(tmp_path, monkeypatch)
+    await asyncio.gather(*[c.volume_step(5) for _ in range(4)])   # key repeat
+    assert sp.volume == 60
+
+
+@pytest.mark.asyncio
+async def test_quick_taps_on_preview_play_one_and_put_the_volume_back(tmp_path, monkeypatch):
+    sp = Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    await asyncio.gather(c.preview_tone('coffee'), c.preview_tone('morning'), c.preview_tone('marimba'))
+    await asyncio.sleep(0.1)
+    assert sp.volume == 70 and c.held_volume == 40
+    await c._stop_preview()
+    assert sp.volume == 40 and c.held_volume is None and c.audio.player.buffered() < 0.01
