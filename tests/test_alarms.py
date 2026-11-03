@@ -609,18 +609,19 @@ async def test_tools_alarm_volume_and_device_volume(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_reminder_rings_three_rounds_then_is_noted_missed(tmp_path, monkeypatch):
+async def test_reminder_rings_for_its_time_then_is_noted_missed(tmp_path, monkeypatch):
     sp = Speaker(monkeypatch, 40)
     c = make_client(tmp_path, monkeypatch)
     monkeypatch.setattr(alarms, 'REMINDER_PAUSE', 0)
+    monkeypatch.setattr(alarms, 'REMINDER_SECONDS', 0.3)
     monkeypatch.setattr(alarms, 'reminder_chime', lambda: np.full((4800, 2), 0.1, np.float32))   # 0.1 s
     pushed = []
     orig = c.audio.player.push
     c.audio.player.push = lambda x: (pushed.append(len(x)), orig(x))
     c.alarms.create('reminder', '开会', minutes=1)
     await ring_now(c)
-    await asyncio.sleep(0.6)
-    assert c.ring is None and len(pushed) == alarms.REMINDER_ROUNDS and sp.volume == 40
+    await asyncio.sleep(0.8)
+    assert c.ring is None and len(pushed) >= 1 and sp.volume == 40
     assert [(m['label'], m['why']) for m in c.alarms.missed] == [('开会', 'unanswered')]
 
 

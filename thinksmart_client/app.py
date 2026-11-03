@@ -24,7 +24,7 @@ States shown to the page: idle, connecting, listening, thinking, speaking.
   screen is dimmed.
 - Countdowns, alarms and reminders (alarms.py) are kept and rung here; the model only sets them
   through device tools. A ring lights the screen, switches the speaker to the alarm volume until it
-  stops (the wake word, 停止 or 再睡 on the page; given up on after 5 minutes, a reminder after 3 rounds of its chime and words) and stops whatever
+  stops (the wake word, 停止 or 再睡 on the page; given up on after 10 minutes, a reminder (its chime and words over and over) after 3) and stops whatever
   the conversation was doing. The volume keys then change only that ring's volume.
 """
 import asyncio
@@ -1233,18 +1233,18 @@ class Client:
             await self._hold_speaker(ring['volume'])
             note = asyncio.create_task(self._speech('，'.join(ring['notes']))) if ring['notes'] else None
             clips, phrase, chime = {}, None, None
-            rounds, last_round_over = 0, None
-            end = time.monotonic() + alarms.RING_SECONDS
+            start = time.monotonic()
+            end, reminder_end, round_over = start + alarms.RING_SECONDS, start + alarms.REMINDER_SECONDS, 0.0
             while True:
                 now = time.monotonic()
                 # only reminders: the chime and their words a few times; an alarm or countdown among
                 # them: the tone over and over, up to RING_SECONDS
                 reminders = all(i['kind'] == 'reminder' for i in ring['items'])
-                if reminders and last_round_over is not None and now >= last_round_over:
+                if reminders and now >= reminder_end and now >= round_over:   # its words finished, not cut off
                     break
                 if not reminders and now >= end:
                     break
-                if self.audio.player.buffered() < 0.3 and not (reminders and last_round_over):
+                if self.audio.player.buffered() < 0.3 and not (reminders and now >= reminder_end):
                     words = []
                     if note and note.done():
                         words += self._clip_sound(note.result())   # once, in the first round it is ready for
@@ -1257,9 +1257,7 @@ class Client:
                     if reminders:
                         chime = alarms.reminder_chime() if chime is None else chime
                         sound = overlay(chime, np.concatenate(words), alarms.CHIME_SPEECH_AT) if words else chime
-                        rounds += 1
-                        if rounds >= alarms.REMINDER_ROUNDS:
-                            last_round_over = now + self.audio.player.buffered() + len(sound) / OUT_RATE
+                        round_over = now + self.audio.player.buffered() + len(sound) / OUT_RATE
                         sound = np.concatenate([sound, np.zeros((int(OUT_RATE * alarms.REMINDER_PAUSE), 2), np.float32)])
                     else:
                         phrase = alarms.tone(self.alarm_tone) if phrase is None else phrase
@@ -1272,8 +1270,7 @@ class Client:
                 except asyncio.TimeoutError:
                     pass
             if not answered:
-                log.info('nobody stopped the ring (%s): noted as missed',
-                         f'{rounds} rounds' if last_round_over else f'{alarms.RING_SECONDS} s')
+                log.info('nobody stopped the ring in %.0f s: noted as missed', time.monotonic() - start)
         finally:
             self.audio.player.trim(0)
             self.screen.alarm(False)

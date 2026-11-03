@@ -344,11 +344,18 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 .al-del { flex: none; min-width: 108px; height: 56px; padding: 0 18px; border-radius: 16px; font-size: 18px; color: var(--ink2); border: 1px solid var(--line); background: var(--card); }
 .al-del.armed { color: #fff; border-color: transparent; background: var(--bad); }
 .al-del:active { transform: scale(.95); }
-.al.gone { min-height: 60px; background: none; }
-.al.gone i { background: #ffffff1c; color: var(--ink2); }
 .tones { grid-template-columns: repeat(3, 1fr); }
-.missed { display: flex; flex-direction: column; gap: 12px; }
-.missed[hidden] { display: none; }
+/* home: missed alarms and reminders, until 知道了 */
+.missed-home { margin-top: 18px; max-width: 700px; padding: 16px 18px; border-radius: 20px; background: #ffb54710; border: 1px solid #ffb54744; }
+.missed-home[hidden] { display: none; }
+.mh-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.mh-head b { font-size: 19px; color: #ffe2b0; }
+.mh-ok { height: 44px; padding: 0 18px; border-radius: 14px; font-size: 18px; color: #2a1800; background: linear-gradient(135deg, #ffd68a, var(--warn)); }
+.mh-ok:active { transform: scale(.95); }
+.mh { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; font-size: 19px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.mh b { color: var(--ink); font-weight: 600; }
+.mh small { margin-left: auto; font-size: 16px; color: var(--ink3); }
+.mh.more { color: var(--ink3); font-size: 16px; }
 
 /* ---- overlays ---- */
 /* an alarm rings: covers everything (also the settings) until 停止 / 再睡 or the wake word */

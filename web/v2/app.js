@@ -477,7 +477,7 @@ function dayText(t) {
   const d = new Date(t * 1000), today = new Date();
   today.setHours(0, 0, 0, 0);
   const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today) / 86400000);
-  return ['今天', '明天', '后天'][days] || `${d.getMonth() + 1}月${d.getDate()}日 星期${WEEK[d.getDay()]}`;
+  return { '-1': '昨天', 0: '今天', 1: '明天', 2: '后天' }[days] || `${d.getMonth() + 1}月${d.getDate()}日 星期${WEEK[d.getDay()]}`;
 }
 function left(t) {
   const s = Math.max(0, Math.round(t - now_s()));
@@ -516,10 +516,12 @@ function renderAlarms() {
   }).join('') : '<div class="alarm-empty">还没有闹钟和提醒</div>';
   $('tones').innerHTML = Object.entries(a.tones || {}).map(([k, name]) =>
     `<button data-tone="${esc(k)}" class="${k === a.tone ? 'on' : ''}">${esc(name)}</button>`).join('');
+  // home: the missed ones (newest first, at most 3 shown) until 知道了
   $('missedBox').hidden = !a.missed.length;
-  $('missedList').innerHTML = a.missed.map(m =>
-    `<div class="al gone"><i>${KIND_ICON[m.kind] || ''}</i><div class="al-text"><b>${hhmm(m.at)}${m.label ? ' ' + esc(m.label) : ''}</b>` +
-    `<span>${dayText(m.at)} · ${m.why === 'off' ? '设备关着，错过了' : m.kind === 'reminder' ? '提醒了 3 遍没人停' : '响了 5 分钟没人停'}</span></div></div>`).join('');
+  $('missedList').innerHTML = a.missed.slice(0, 3).map(m =>
+    `<div class="mh"><b>${dayText(m.at)} ${hhmm(m.at)}</b>${KIND_ICON[m.kind] || ''}${m.label ? ' · ' + esc(m.label) : ''}` +
+    `<small>${m.why === 'off' ? '设备关着' : m.kind === 'reminder' ? '提醒了 3 分钟没人停' : '响了 10 分钟没人停'}</small></div>`).join('') +
+    (a.missed.length > 3 ? `<div class="mh more">还有 ${a.missed.length - 3} 条</div>` : '');
   renderAlarmVol();
   renderRing();
   tickAlarms();
@@ -1025,7 +1027,8 @@ const demo = DEMO === null ? null : (() => {
       { id: 1, kind: 'alarm', type: '闹钟', label: '起床', at: now() + 9 * 3600, repeat: '每个工作日（周一到周五）', snoozed: false },
       { id: 2, kind: 'reminder', type: '提醒', label: '晾衣服', at: now() + 26 * 3600, repeat: '', snoozed: false, spoken: true },
     ],
-    missed: [{ kind: 'alarm', label: '吃药', at: now() - 20 * 3600, why: 'unanswered', noted: now() - 20 * 3600 }],
+    missed: [{ kind: 'reminder', label: '吃药', at: now() - 3 * 3600, why: 'unanswered', noted: now() - 3 * 3600 },
+             { kind: 'alarm', label: '起床', at: now() - 20 * 3600, why: 'off', noted: now() - 20 * 3600 }],
   });
   const steps = [
     ['idle', 4000, () => {
