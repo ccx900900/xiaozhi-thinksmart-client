@@ -44,7 +44,7 @@ DEFAULTS = {
     # blank this long after the last touch or conversation (device.SCREEN_OFF_MINUTES); off: never
     'screen_off': {'enabled': True, 'minutes': 5},
     'alarm_volume': 70,   # countdowns, alarms and reminders ring at this, whatever the device volume (alarms.py)
-    'alarm_tone': 'marimba',   # alarms.TONES
+    'alarm_tone': 'coffee',   # alarms.TONES
 }
 
 

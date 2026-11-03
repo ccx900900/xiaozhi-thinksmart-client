@@ -26,10 +26,11 @@ import os
 import pathlib
 import re
 import time
+from functools import lru_cache
 
 import numpy as np
 
-from .audio import OUT_RATE
+from .audio import OUT_RATE, load_wav
 
 log = logging.getLogger(__name__)
 
@@ -398,10 +399,15 @@ class Alarms:
                 'spoken': item.get('clip')}
 
 
-# ---- ring tones: made here (no recordings, nothing to license), like the wake chime ----
+# ---- ring tones ----
+# coffee: a piano piece rendered from the Salamander Grand Piano samples (CC BY 3.0, Alexander Holm) by
+# tools/ringtone/ (the user picked it from 14 on 2026-11-04). The other three are made here, like the
+# wake chime.
 
-TONES = {'marimba': '清晨木琴', 'bell': '钟声', 'beep': '经典滴滴'}
-DEFAULT_TONE = 'marimba'
+SOUNDS = pathlib.Path(__file__).resolve().parent.parent / 'web' / 'sounds'
+TONES = {'coffee': '咖啡时光（钢琴）', 'marimba': '清晨木琴', 'bell': '钟声', 'beep': '经典滴滴'}
+FILE_TONES = {'coffee': 'alarm-coffee.wav'}
+DEFAULT_TONE = 'coffee'
 TONE_GAP = 1.2      # silence after each phrase: room for the wake word to be heard
 
 
@@ -437,8 +443,13 @@ def _place(parts, total):
     return out
 
 
+@lru_cache(maxsize=None)
 def tone(name, peak=0.6):
-    """One phrase of the ring tone, then TONE_GAP of silence, as 48 kHz stereo float32."""
+    """One phrase of the ring tone, then TONE_GAP of silence, as 48 kHz stereo float32 (cached: a ring
+    asks for it every round; nobody writes into it)."""
+    if name in FILE_TONES:
+        x = load_wav(SOUNDS / FILE_TONES[name])
+        return np.concatenate([x, np.zeros((int(OUT_RATE * TONE_GAP), 2), np.float32)])
     C6, E6, G6, C7 = 1046.5, 1318.5, 1568.0, 2093.0
     if name == 'bell':
         x = _place([(0, _bell(659.25)), (0.55, _bell(523.25))], 2.2)

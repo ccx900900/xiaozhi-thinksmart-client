@@ -12,7 +12,7 @@ const ui = {
   models: { current: null, options: [] },
   thread: { entry: null, messages: [] },
   ptt: false,
-  alarms: { synced: true, items: [], missed: [], ringing: null, volume: 70, tone: 'marimba', tones: {} },
+  alarms: { synced: true, items: [], missed: [], ringing: null, volume: 70, tone: 'coffee', tones: {} },
 };
 
 const SUGGEST = [
@@ -1014,9 +1014,9 @@ const demo = DEMO === null ? null : (() => {
     handlers.level({ mic: v * .07, out: v * .17 });
   }, 100);
 
-  const tones = { marimba: '清晨木琴', bell: '钟声', beep: '经典滴滴' };
+  const tones = { coffee: '咖啡时光（钢琴）', marimba: '清晨木琴', bell: '钟声', beep: '经典滴滴' };
   const alarmsDemo = () => ({
-    synced: true, volume: 70, tone: 'marimba', tones, ringing: null,
+    synced: true, volume: 70, tone: 'coffee', tones, ringing: null,
     items: [
       { id: 3, kind: 'timer', type: '倒计时', label: '煮鸡蛋', at: now() + 271, repeat: '', snoozed: false },
       { id: 1, kind: 'alarm', type: '闹钟', label: '起床', at: now() + 9 * 3600, repeat: '每个工作日（周一到周五）', snoozed: false },

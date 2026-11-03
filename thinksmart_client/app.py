@@ -72,6 +72,7 @@ MODEL_POLL = 30          # seconds between asking the hub for its models (change
 MODEL_RETRY = 3          # until the hub answers (it takes over a minute to start after a boot)
 ALARM_VOLUME = 70        # the alarms' own volume until the user sets one
 TTS_TIMEOUT = 30         # seconds for the hub to synthesise a reminder's words
+PREVIEW_SECONDS = 8      # the settings' 试听 plays at most this much of a tone
 CLIP_GAP = 0.8           # seconds of silence after each spoken reminder in a ring
 
 # Hub vendor id -> (logo file, company). Unknown vendors are guessed from the model name.
@@ -1090,10 +1091,14 @@ class Client:
 
     async def _play_preview(self, name):
         sound = alarms.tone(name)
+        n = min(len(sound) - int(OUT_RATE * alarms.TONE_GAP), int(OUT_RATE * PREVIEW_SECONDS))
+        sound = sound[:n].copy()                       # a piece: only its first seconds, faded out
+        fade = min(n, int(OUT_RATE * 0.6))
+        sound[n - fade:] *= np.linspace(1, 0, fade, dtype=np.float32)[:, None]
         try:
             await self._hold_speaker(self.alarm_volume)
             self.audio.player.push(sound)
-            await asyncio.sleep(len(sound) / OUT_RATE - alarms.TONE_GAP + 0.1)
+            await asyncio.sleep(n / OUT_RATE + 0.1)
         finally:
             self.audio.player.trim(0)
             await self._release_speaker()

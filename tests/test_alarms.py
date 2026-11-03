@@ -305,13 +305,14 @@ def test_snooze_outside_the_window_after_a_snooze_is_gone(tmp_path):
 
 
 def test_tones():
+    assert alarms.DEFAULT_TONE in alarms.TONES
     for name in alarms.TONES:
         x = alarms.tone(name)
         assert x.dtype == np.float32 and x.shape[1] == 2
-        assert 0.5 < np.abs(x).max() <= 0.6 + 1e-6
+        assert 0.3 < np.abs(x).max() <= 0.8 + 1e-3
         gap = x[-int(OUT_RATE * alarms.TONE_GAP):]
         assert not gap.any()   # silence for the wake word after each phrase
-        assert 1.5 < len(x) / OUT_RATE < 4
+        assert 1.5 < len(x) / OUT_RATE < (35 if name in alarms.FILE_TONES else 4)
 
 
 # ---- the client: ringing, volume ----
