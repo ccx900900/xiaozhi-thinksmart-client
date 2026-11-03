@@ -16,6 +16,21 @@ import test_barge_in
 from thinksmart_client import alarms, app, config, mcp
 from thinksmart_client.audio import OUT_RATE
 
+# test_barge_in stubs thinksmart_client.opus (no libopus needed); the tone files need the real reader
+try:
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location('real_opus', app.ROOT / 'thinksmart_client' / 'opus.py')
+    real_opus = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(real_opus)
+    alarms.opus.read_ogg = real_opus.read_ogg
+except OSError:   # no libopus here (on a Mac: DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib): a stand-in piece
+    real_opus = None
+
+    def _stand_in(path):
+        open(path).close()   # a missing file still fails like the real reader
+        return np.full(OUT_RATE * 3, 0.5, np.float32)
+    alarms.opus.read_ogg = _stand_in
+
 
 def ts(*args):
     return datetime.datetime(*args).timestamp()
@@ -748,3 +763,15 @@ async def test_quick_taps_on_preview_play_one_and_put_the_volume_back(tmp_path, 
     assert sp.volume == 70 and c.held_volume == 40
     await c._stop_preview()
     assert sp.volume == 40 and c.held_volume is None and c.audio.player.buffered() < 0.01
+
+
+@pytest.mark.skipif(real_opus is None, reason='no libopus')
+def test_tone_files_decode_to_the_pieces():
+    lengths = {'coffee': 27.2, 'morning': 18.2, 'bright': 20.2, 'hop': 11.0}
+    for name, seconds in lengths.items():
+        x = alarms.tone(name)[:-int(OUT_RATE * alarms.TONE_GAP)]
+        assert abs(len(x) / OUT_RATE - seconds) < 0.1, name
+        rms = 20 * np.log10(np.sqrt(np.mean(x ** 2)))
+        assert -24 < rms < -14 and np.abs(x).max() < 0.95, (name, rms)
+    chime = alarms.reminder_chime()
+    assert chime.shape[1] == 2 and 3 < len(chime) / OUT_RATE < 4

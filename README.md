@@ -45,7 +45,7 @@
 - `thinksmart_client/webrtc_apm/`：py-xiaozhi 的 WebRTC APM ctypes 封装和 arm64 库，MIT（`LICENSE-py-xiaozhi`）
 - `models/kws-zh/`：sherpa-onnx 中文唤醒词模型（wenetspeech），Apache-2.0
 - `web/logos/`：LobeHub icons 1.95.1，MIT
-- `web/sounds/alarm-*.wav`：闹钟铃声（原创曲「咖啡时光」「晨曦」「元气早晨」「阳光小跳跃」和提醒用的短和弦），用 [Salamander Grand Piano V3](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) 的采样渲染（Alexander Holm，CC BY 3.0）；渲染脚本在 `tools/ringtone/`
+- `web/sounds/alarm-*.ogg`（Ogg Opus 64 kbit/s，客户端用系统 libopus 解码）：闹钟铃声（原创曲「咖啡时光」「晨曦」「元气早晨」「阳光小跳跃」和提醒用的短和弦），用 [Salamander Grand Piano V3](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html) 的采样渲染（Alexander Holm，CC BY 3.0）；渲染脚本在 `tools/ringtone/`
 - 依赖：numpy、sounddevice、soxr、websockets、aiohttp、sherpa-onnx
 
 ## 许可

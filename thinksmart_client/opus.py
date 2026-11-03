@@ -47,14 +47,40 @@ class Decoder:
         if err.value != 0:
             raise RuntimeError(f'opus_decoder_create: {err.value}')
         self._out = np.zeros(rate * 120 // 1000 * channels, dtype=np.int16)  # 120 ms is Opus's longest frame
+        self._channels = channels
 
     def decode(self, packet):
         """Returns float32 samples in [-1, 1]."""
-        n = _lib.opus_decode(self._st, packet, len(packet), self._out.ctypes.data, len(self._out), 0)
+        n = _lib.opus_decode(self._st, packet, len(packet), self._out.ctypes.data, len(self._out) // self._channels, 0)
         if n < 0:
             raise RuntimeError(f'opus_decode: {n}')
-        return self._out[:n].astype(np.float32) / 32768.0
+        return self._out[:n * self._channels].astype(np.float32) / 32768.0
 
     def __del__(self):
         if getattr(self, '_st', None):
             _lib.opus_decoder_destroy(self._st)
+
+
+def read_ogg(path):
+    """An Ogg Opus file (the alarm tones) as float32 samples at 48 kHz, mono (one channel kept).
+    Just enough of Ogg: pages → packets; the first two packets are OpusHead and OpusTags."""
+    data = open(path, 'rb').read()
+    packets, partial, pos = [], b'', 0
+    while pos < len(data):
+        if data[pos:pos + 4] != b'OggS':
+            raise ValueError(f'{path}: not an Ogg page at byte {pos}')
+        nseg = data[pos + 26]
+        lacing = data[pos + 27:pos + 27 + nseg]
+        pos += 27 + nseg
+        for n in lacing:
+            partial += data[pos:pos + n]
+            pos += n
+            if n < 255:   # a packet ends with a segment shorter than 255
+                packets.append(partial)
+                partial = b''
+    if len(packets) < 3 or not packets[0].startswith(b'OpusHead'):
+        raise ValueError(f'{path}: not Ogg Opus')
+    channels, pre_skip = packets[0][9], int.from_bytes(packets[0][10:12], 'little')
+    dec = Decoder(48000, channels)
+    out = np.concatenate([dec.decode(p) for p in packets[2:]])
+    return out.reshape(-1, channels)[pre_skip:, 0].copy()

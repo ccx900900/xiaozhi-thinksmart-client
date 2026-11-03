@@ -29,7 +29,8 @@ import time
 
 import numpy as np
 
-from .audio import OUT_RATE, load_wav
+from . import opus
+from .audio import OUT_RATE
 
 log = logging.getLogger(__name__)
 
@@ -410,8 +411,8 @@ class Alarms:
 
 SOUNDS = pathlib.Path(__file__).resolve().parent.parent / 'web' / 'sounds'
 TONES = {'coffee': '咖啡时光', 'morning': '晨曦', 'bright': '元气早晨', 'hop': '阳光小跳跃', 'marimba': '清晨木琴'}
-FILE_TONES = {'coffee': 'alarm-coffee.wav', 'morning': 'alarm-morning-light.wav', 'bright': 'alarm-bright-start.wav',
-              'hop': 'alarm-sunny-hop.wav'}
+FILE_TONES = {'coffee': 'alarm-coffee.ogg', 'morning': 'alarm-morning-light.ogg', 'bright': 'alarm-bright-start.ogg',
+              'hop': 'alarm-sunny-hop.ogg'}
 DEFAULT_TONE = 'coffee'
 CHIME_SPEECH_AT = 1.4   # seconds into the reminder chime its words begin, over the chord's ring
 TONE_GAP = 1.2      # silence after each phrase: room for the wake word to be heard
@@ -441,9 +442,9 @@ def tone(name, peak=0.6):
     piano piece is ~10 MB as float32, held only while it rings."""
     if name in FILE_TONES:
         try:
-            x = load_wav(SOUNDS / FILE_TONES[name])
+            x = load_sound(SOUNDS / FILE_TONES[name])
             return np.concatenate([x, np.zeros((int(OUT_RATE * TONE_GAP), 2), np.float32)])
-        except (OSError, EOFError, ValueError, KeyError) as e:   # missing or broken file: still ring
+        except (OSError, EOFError, ValueError, KeyError, IndexError, RuntimeError) as e:   # missing or broken: still ring
             log.error('ring tone %s unreadable (%s): the marimba instead', name, e)
     C6, E6, G6, C7 = 1046.5, 1318.5, 1568.0, 2093.0
     notes = [C6, E6, G6, C7, G6, E6, C6, G6]
@@ -452,10 +453,17 @@ def tone(name, peak=0.6):
     return np.repeat(x[:, None], 2, axis=1)
 
 
+def load_sound(path):
+    """A tone file: Ogg Opus at 64 kbit/s (a tenth of the WAV it was made from, so each client update
+    downloads ~0.7 MB of tones instead of ~3.2), as 48 kHz stereo float32."""
+    x = opus.read_ogg(path)
+    return np.repeat(x[:, None], 2, axis=1)
+
+
 def reminder_chime():
     """A reminder's chime: a rolled piano chord (~3 s with its ring), its words start CHIME_SPEECH_AT in."""
     try:
-        return load_wav(SOUNDS / 'alarm-chime.wav')
-    except (OSError, EOFError, ValueError, KeyError) as e:
+        return load_sound(SOUNDS / 'alarm-chime.ogg')
+    except (OSError, EOFError, ValueError, KeyError, IndexError, RuntimeError) as e:
         log.error('reminder chime unreadable (%s): the marimba instead', e)
         return tone('marimba')
