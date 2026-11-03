@@ -1271,6 +1271,9 @@ class Client:
                     pass
             if not answered:
                 log.info('nobody stopped the ring in %.0f s: noted as missed', time.monotonic() - start)
+        except Exception:
+            # whoever awaits this (stop_alarm from the wake word) must not fail with it
+            log.exception('the ring failed')
         finally:
             self.audio.player.trim(0)
             self.screen.alarm(False)

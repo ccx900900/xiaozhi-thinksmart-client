@@ -645,3 +645,22 @@ async def test_closing_the_settings_stops_a_preview(tmp_path, monkeypatch):
         assert sp.volume == 70 and c.audio.player.buffered() > 1
         assert (await (await http.post('/api/alarm-tone', json={'stop': True})).json())['ok']
         assert sp.volume == 40 and c.audio.player.buffered() < 0.01 and c.preview is None
+
+
+@pytest.mark.asyncio
+async def test_a_broken_tone_file_still_rings(tmp_path, monkeypatch):
+    monkeypatch.setattr(alarms, 'SOUNDS', tmp_path / 'nowhere')
+    x = alarms.tone('coffee')
+    assert len(x) / OUT_RATE < 4 and np.abs(x).max() > 0.5      # the marimba
+    assert np.array_equal(alarms.reminder_chime(), alarms.tone('marimba'))
+
+
+@pytest.mark.asyncio
+async def test_a_failing_ring_does_not_break_the_wake_word(tmp_path, monkeypatch):
+    sp = Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    c.alarms.create('alarm', time='07:00')
+    monkeypatch.setattr(alarms, 'tone', lambda name: 1 / 0)
+    await ring_now(c)
+    await c.wake('voice')                         # stop_alarm awaits the failed ring: no exception
+    assert c.ring is None and sp.volume == 40 and c.state == 'listening'

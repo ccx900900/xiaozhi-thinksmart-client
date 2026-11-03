@@ -437,8 +437,11 @@ def tone(name, peak=0.6):
     """One phrase of the ring tone, then TONE_GAP of silence, as 48 kHz stereo float32. Not cached: the
     piano piece is ~10 MB as float32, held only while it rings."""
     if name in FILE_TONES:
-        x = load_wav(SOUNDS / FILE_TONES[name])
-        return np.concatenate([x, np.zeros((int(OUT_RATE * TONE_GAP), 2), np.float32)])
+        try:
+            x = load_wav(SOUNDS / FILE_TONES[name])
+            return np.concatenate([x, np.zeros((int(OUT_RATE * TONE_GAP), 2), np.float32)])
+        except (OSError, EOFError, ValueError, KeyError) as e:   # missing or broken file: still ring
+            log.error('ring tone %s unreadable (%s): the marimba instead', name, e)
     C6, E6, G6, C7 = 1046.5, 1318.5, 1568.0, 2093.0
     notes = [C6, E6, G6, C7, G6, E6, C6, G6]
     x = _place([(0.13 * i, _bar(f)) for i, f in enumerate(notes)], 1.6)
@@ -448,4 +451,8 @@ def tone(name, peak=0.6):
 
 def reminder_chime():
     """A reminder's chime: a rolled piano chord (~3 s with its ring), its words start CHIME_SPEECH_AT in."""
-    return load_wav(SOUNDS / 'alarm-chime.wav')
+    try:
+        return load_wav(SOUNDS / 'alarm-chime.wav')
+    except (OSError, EOFError, ValueError, KeyError) as e:
+        log.error('reminder chime unreadable (%s): the marimba instead', e)
+        return tone('marimba')
