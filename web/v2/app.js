@@ -519,7 +519,7 @@ function renderAlarms() {
   $('missedBox').hidden = !a.missed.length;
   $('missedList').innerHTML = a.missed.map(m =>
     `<div class="al gone"><i>${KIND_ICON[m.kind] || ''}</i><div class="al-text"><b>${hhmm(m.at)}${m.label ? ' ' + esc(m.label) : ''}</b>` +
-    `<span>${dayText(m.at)} · ${m.why === 'off' ? '设备关着，错过了' : '响了 10 分钟没人停'}</span></div></div>`).join('');
+    `<span>${dayText(m.at)} · ${m.why === 'off' ? '设备关着，错过了' : m.kind === 'reminder' ? '提醒了 3 遍没人停' : '响了 5 分钟没人停'}</span></div></div>`).join('');
   renderAlarmVol();
   renderRing();
   tickAlarms();
@@ -1014,7 +1014,7 @@ const demo = DEMO === null ? null : (() => {
     handlers.level({ mic: v * .07, out: v * .17 });
   }, 100);
 
-  const tones = { coffee: '咖啡时光（钢琴）', marimba: '清晨木琴', bell: '钟声', beep: '经典滴滴' };
+  const tones = { coffee: '咖啡时光', morning: '晨曦', bright: '元气早晨', hop: '阳光小跳跃', marimba: '清晨木琴' };
   const alarmsDemo = () => ({
     synced: true, volume: 70, tone: 'coffee', tones, ringing: null,
     items: [

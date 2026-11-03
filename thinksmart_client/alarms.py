@@ -43,7 +43,9 @@ MAX_MISSED = 20
 MISSED_DAYS = 7
 LATE = 60                 # seconds: due longer ago than this when seen means it was missed
 CATCH_UP = 3600           # missed by less than this (device off): ring once on start, saying so
-RING_SECONDS = 600        # nobody stops it: give up after 10 minutes and note it as missed
+RING_SECONDS = 300        # an alarm or countdown nobody stops: give up after 5 minutes, noted as missed
+REMINDER_ROUNDS = 3       # a reminder: chime + its words this many times (~30 s), then noted as missed
+REMINDER_PAUSE = 5        # seconds between those rounds
 SNOOZE_WINDOW = 900       # "再睡" finds an entry ringing or rung this recently
 SNOOZE_MINUTES = 10
 MAX_AHEAD = 366 * 86400   # nothing further ahead than a year
@@ -399,14 +401,16 @@ class Alarms:
 
 
 # ---- ring tones ----
-# coffee: a piano piece rendered from the Salamander Grand Piano samples (CC BY 3.0, Alexander Holm) by
-# tools/ringtone/ (the user picked it from 14 on 2026-11-04). The other three are made here, like the
-# wake chime.
+# Four short piano pieces (originals) rendered from the Salamander Grand Piano samples (CC BY 3.0,
+# Alexander Holm) by tools/ringtone/, which the user picked from 14 on 2026-11-04, and the marimba
+# made here like the wake chime. Reminders ring with a short piano chord instead (reminder_chime).
 
 SOUNDS = pathlib.Path(__file__).resolve().parent.parent / 'web' / 'sounds'
-TONES = {'coffee': '咖啡时光（钢琴）', 'marimba': '清晨木琴', 'bell': '钟声', 'beep': '经典滴滴'}
-FILE_TONES = {'coffee': 'alarm-coffee.wav'}
+TONES = {'coffee': '咖啡时光', 'morning': '晨曦', 'bright': '元气早晨', 'hop': '阳光小跳跃', 'marimba': '清晨木琴'}
+FILE_TONES = {'coffee': 'alarm-coffee.wav', 'morning': 'alarm-morning-light.wav', 'bright': 'alarm-bright-start.wav',
+              'hop': 'alarm-sunny-hop.wav'}
 DEFAULT_TONE = 'coffee'
+CHIME_SPEECH_AT = 1.4   # seconds into the reminder chime its words begin, over the chord's ring
 TONE_GAP = 1.2      # silence after each phrase: room for the wake word to be heard
 
 
@@ -419,19 +423,6 @@ def _bar(f, dur=0.6):
     t, a = _env(int(OUT_RATE * dur), 0.0015)
     return a * (np.sin(2 * np.pi * f * t) * np.exp(-6 * t) + 0.35 * np.sin(2 * np.pi * 4 * f * t) * np.exp(-26 * t)
                 + 0.1 * np.sin(2 * np.pi * 9.9 * f * t) * np.exp(-40 * t))
-
-
-def _bell(f, dur=1.6):
-    # a struck bell's partials are not harmonic: hum, prime, tierce, quint, nominal
-    t, a = _env(int(OUT_RATE * dur), 0.002)
-    parts = ((0.5, 0.5, 1.2), (1, 1, 1.8), (1.19, 0.45, 2.6), (1.5, 0.3, 3.2), (2, 0.35, 3.8), (2.74, 0.15, 6))
-    return a * sum(g * np.sin(2 * np.pi * f * r * t) * np.exp(-d * t) for r, g, d in parts)
-
-
-def _beep(f=1568, dur=0.11):
-    t, a = _env(int(OUT_RATE * dur), 0.006)
-    fade = np.minimum(1, (dur - t) / 0.012)
-    return a * fade * (np.sin(2 * np.pi * f * t) + 0.2 * np.sin(2 * np.pi * 2 * f * t))
 
 
 def _place(parts, total):
@@ -449,12 +440,12 @@ def tone(name, peak=0.6):
         x = load_wav(SOUNDS / FILE_TONES[name])
         return np.concatenate([x, np.zeros((int(OUT_RATE * TONE_GAP), 2), np.float32)])
     C6, E6, G6, C7 = 1046.5, 1318.5, 1568.0, 2093.0
-    if name == 'bell':
-        x = _place([(0, _bell(659.25)), (0.55, _bell(523.25))], 2.2)
-    elif name == 'beep':
-        x = _place([(0.22 * i + 0.6 * j, _beep()) for j in range(2) for i in range(4)], 1.6)
-    else:
-        notes = [C6, E6, G6, C7, G6, E6, C6, G6]
-        x = _place([(0.13 * i, _bar(f)) for i, f in enumerate(notes)], 1.6)
+    notes = [C6, E6, G6, C7, G6, E6, C6, G6]
+    x = _place([(0.13 * i, _bar(f)) for i, f in enumerate(notes)], 1.6)
     x = np.concatenate([x * peak / np.max(np.abs(x)), np.zeros(int(OUT_RATE * TONE_GAP))]).astype(np.float32)
     return np.repeat(x[:, None], 2, axis=1)
+
+
+def reminder_chime():
+    """A reminder's chime: a rolled piano chord (~3 s with its ring), its words start CHIME_SPEECH_AT in."""
+    return load_wav(SOUNDS / 'alarm-chime.wav')

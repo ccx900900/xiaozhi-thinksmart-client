@@ -9,7 +9,7 @@ import soxr
 import render
 
 piano = render.Piano(sys.argv[1])
-name, fn = next(p for p in render.scores.PIECES if p[0].startswith(sys.argv[2]))
+name, fn = next(p for p in render.scores.PIECES + getattr(render.scores, 'CHIMES', []) if p[0].startswith(sys.argv[2]))
 x = render.render(piano, fn).mean(axis=1)
 x = soxr.resample(x, render.SR, 24000)
 pcm = (np.clip(x, -1, 1) * 32767).astype(np.int16)

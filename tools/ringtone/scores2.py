@@ -139,3 +139,13 @@ def twinkle():
 PIECES = [('7-咖啡时光（原创）', coffee_time), ('8-清晨散步（原创）', morning_walk), ('9-阳光小跳跃（原创）', sunny_hop),
           ('10-星光（原创）', starlight), ('11-帕赫贝尔卡农', canon), ('12-格里格晨景', morning_mood),
           ('13-欢乐颂', ode_to_joy), ('14-小星星变奏曲', twinkle)]
+
+
+def reminder_chime():
+    """提醒提示音：一个慢慢琶开的 Cmaj9 和弦（和「咖啡时光」同一架钢琴），约 2 秒，后面接要念的话。"""
+    ev = [(0, midi('C3'), 3, 62)]
+    ev += [(0.12 * i, midi(n), 3 - 0.12 * i, 66 + 3 * i) for i, n in enumerate('G3 E4 B4 D5 G5'.split())]
+    return 100, ev, 3.2
+
+
+CHIMES = [('提醒提示音', reminder_chime)]

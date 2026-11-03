@@ -1,6 +1,6 @@
 # 钢琴铃声
 
-`web/sounds/alarm-coffee.wav`（闹钟默认铃声「咖啡时光」，原创曲）是用这里的脚本渲染的。
+`web/sounds/alarm-*.wav` 是用这里的脚本渲染的：`alarm-coffee`（7 咖啡时光，默认）、`alarm-morning-light`（1 晨曦）、`alarm-bright-start`（3 元气早晨）、`alarm-sunny-hop`（9 阳光小跳跃），都是原创曲；`alarm-chime` 是提醒用的短和弦（`scores2.py` 的 `CHIMES`）。
 
 - 采样：[Salamander Grand Piano V3](https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html)（雅马哈 C5，Alexander Holm），CC BY 3.0。下载 `SalamanderGrandPianoV3+20161209_44khz16bit.tar.xz`（412 MB），解压到仓库外，不进仓库。
 - `scores.py`、`scores2.py`：乐谱（每个音：拍、音高、时值、力度）。原创曲之外的几首是作曲版权已过期的古典曲片段。

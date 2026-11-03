@@ -344,7 +344,7 @@ def make_client(tmp_path, monkeypatch, clock=None):
     c.volume_lock = asyncio.Lock()
     c.held_volume = None
     c.preview = None
-    c.alarm_volume, c.alarm_tone = 70, 'beep'
+    c.alarm_volume, c.alarm_tone = 70, 'marimba'
     c.screen = types.SimpleNamespace(hold=lambda: None, release=lambda: None, poke=lambda: None, ringing=False,
                                      level=100, dimmed=False)
     c.screen.alarm = lambda on: setattr(c.screen, 'ringing', on)
@@ -514,8 +514,10 @@ async def test_reminder_words_are_synthesised_once_and_played_each_cycle(tmp_pat
     await asyncio.sleep(0.05)
     assert said == ['该晾衣服了'] and c.alarms.get(view['id'])['clip']
     await ring_now(c)
-    tone = len(alarms.tone('beep'))
-    assert c.audio.player.buffered() * OUT_RATE >= tone + 48000   # tone, then the words
+    chime = len(alarms.reminder_chime())
+    # a short piano chord with the words over its ring, then a pause (no long ring tone first)
+    assert c.audio.player.buffered() * OUT_RATE >= chime + alarms.REMINDER_PAUSE * OUT_RATE
+    assert c.audio.player.buffered() < 12
     await c.stop_alarm()
     assert said == ['该晾衣服了']                                  # not synthesised again
 
@@ -541,11 +543,11 @@ async def test_preview_plays_at_the_alarm_volume_and_puts_it_back(tmp_path, monk
     sp = Speaker(monkeypatch, 40)
     c = make_client(tmp_path, monkeypatch)
     monkeypatch.setattr(alarms, 'TONE_GAP', 1.2)
-    await c.preview_tone('bell')
+    await c.preview_tone('coffee')
     await asyncio.sleep(0.05)
     assert sp.volume == 70 and c.held_volume == 40
     await c.set_volume(45)                       # the slider moved meanwhile
-    await c.preview_tone('beep')                 # a second tap: the first one stops
+    await c.preview_tone('marimba')              # a second tap: the first one stops
     await asyncio.sleep(0.05)
     assert sp.volume == 70
     await c._stop_preview()
@@ -604,3 +606,27 @@ async def test_tools_alarm_volume_and_device_volume(tmp_path, monkeypatch):
     assert sp.volume == 30 and ('volume', {'volume': 30, 'source': 'voice'}) in seen
     err, text = await call(c, 'self.audio_speaker.get_volume')
     assert json.loads(text) == {'volume': 30}
+
+
+@pytest.mark.asyncio
+async def test_reminder_rings_three_rounds_then_is_noted_missed(tmp_path, monkeypatch):
+    sp = Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(alarms, 'REMINDER_PAUSE', 0)
+    monkeypatch.setattr(alarms, 'reminder_chime', lambda: np.full((4800, 2), 0.1, np.float32))   # 0.1 s
+    pushed = []
+    orig = c.audio.player.push
+    c.audio.player.push = lambda x: (pushed.append(len(x)), orig(x))
+    c.alarms.create('reminder', '开会', minutes=1)
+    await ring_now(c)
+    await asyncio.sleep(0.6)
+    assert c.ring is None and len(pushed) == alarms.REMINDER_ROUNDS and sp.volume == 40
+    assert [(m['label'], m['why']) for m in c.alarms.missed] == [('开会', 'unanswered')]
+
+
+def test_tone_choices():
+    assert alarms.DEFAULT_TONE == 'coffee'
+    assert list(alarms.TONES) == ['coffee', 'morning', 'bright', 'hop', 'marimba']
+    for name, f in alarms.FILE_TONES.items():
+        assert (alarms.SOUNDS / f).exists(), f
+    assert len(alarms.reminder_chime()) / OUT_RATE < 4
