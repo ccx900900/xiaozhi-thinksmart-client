@@ -242,8 +242,8 @@ class Audio:
 
 
 def load_wav(path, gain=1.0):
-    """A local sound (chime, short replies) as 48 kHz stereo float32."""
-    with wave.open(str(path)) as w:
+    """A local sound (chime, short replies, a reminder's words; a path or a file object) as 48 kHz stereo float32."""
+    with wave.open(path if hasattr(path, 'read') else str(path)) as w:
         rate, ch, width = w.getframerate(), w.getnchannels(), w.getsampwidth()
         raw = w.readframes(w.getnframes())
     dtype = {2: np.int16, 4: np.int32}[width]
