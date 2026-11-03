@@ -1180,7 +1180,7 @@ class Client:
         while True:
             try:
                 now = time.time()
-                if now - last_tidy > 60:
+                if self.clock_ok and now - last_tidy > 60:   # by a clock that is right
                     last_tidy = now
                     before = (len(self.alarms.items), len(self.alarms.missed))
                     self.alarms.tidy(now)
