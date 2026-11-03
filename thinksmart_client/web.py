@@ -20,7 +20,7 @@ def make_app(client: Client):
     app = web.Application()
 
     async def index(_request):
-        # the second design (orb with a face) is the UI since 2026-10-31; /v1 keeps the first one
+        # v2 (role B frames) is the UI; /v1 keeps the first one
         return web.FileResponse(WEB / 'v2' / 'index.html', headers={'Cache-Control': 'no-cache'})
 
     async def index_v1(_request):

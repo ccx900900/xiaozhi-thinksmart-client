@@ -261,7 +261,7 @@ class Client:
             if self.vad_ended:
                 self.uploading = False   # keep what follows for the new question, not the old one
             # keep what follows: checking the hit, the chime and connecting take a moment, and
-            # "小麦小麦，今天..." is often said in one go
+            # "小舒小舒，今天..." is often said in one go
             self.backlog = []
             audio = self.kws.recent()
             self.loop.call_soon_threadsafe(lambda: asyncio.create_task(self.voice_wake(hit, audio)))
@@ -430,7 +430,7 @@ class Client:
         self.deadline = None
         if missed:
             self.play('miss')
-            self.events.publish('toast', {'kind': 'info', 'text': '没听清，可以再说一次「小麦小麦」'})
+            self.events.publish('toast', {'kind': 'info', 'text': '没听清，可以再说一次「小舒小舒」'})
         self.set_state('idle')
 
     async def abort(self, reason=None):

@@ -52,12 +52,12 @@ async def test_wake_word_is_listened_for_once_the_hub_is_recognising():
     await c._on_json({'type': 'vad', 'state': 'end'})
     c._on_block(block(), block())
     assert c.kws.fed == 1
-    c.kws.hit = '小麦小麦'
+    c.kws.hit = '小舒小舒'
     c._on_block(block(), block())
     assert not c.uploading and c.backlog == []   # what follows is kept for the new question
     await asyncio.sleep(0)
     await asyncio.sleep(0)
-    assert woke == ['小麦小麦']
+    assert woke == ['小舒小舒']
     c.kws.hit = None
     c._on_block(block(), block())
     assert len(c.backlog) == 1

@@ -1,6 +1,6 @@
 # xiaozhi-thinksmart-client
 
-联想 ThinkSmart View（CD-18781Y）上的语音客户端：本地唤醒词「小麦小麦」、回声消除、按小智协议连 [xiaozhi-hub-server](https://github.com/justhalfbit/xiaozhi-hub-server)，并在 `127.0.0.1:8090` 提供展示屏上的对话界面。
+联想 ThinkSmart View（CD-18781Y）上的语音客户端：本地唤醒词「小舒小舒」、回声消除、按小智协议连 [xiaozhi-hub-server](https://github.com/justhalfbit/xiaozhi-hub-server)，并在 `127.0.0.1:8090` 提供展示屏上的对话界面。
 
 它是 [thinksmart-ubuntu-image](https://github.com/justhalfbit/thinksmart-ubuntu-image) 系统镜像的一部分，刷机和安装见那边的 README；装好的设备在设置页「软件更新」里从本仓库的 Release 在线更新。
 
@@ -21,7 +21,7 @@
 | `thinksmart_client/sleep.py` | 睡眠时段（可跨午夜）：回复音量减半、屏幕调暗、补报不主动念；设置存在用户配置里（`config.save`），页面设置页和语音工具都能改 |
 | `thinksmart_client/opus.py` | 系统 libopus 的 ctypes 封装 |
 | `thinksmart_client/web.py` | 页面、事件流（SSE）、按钮接口 |
-| `web/` | 界面：正式版是 `v2/`（带表情的光球，首页 `/` 和 `/v2`），第一版 `index.html`、`app.css`、`app.js` 留在 `/v1`；`test/` 是 GPU 排查用的测试页；另有提示音、厂商图标 |
+| `web/` | 界面：正式版是 `v2/`（桌宠角色三帧 `v2/roles/role_b_*.png`，首页 `/` 和 `/v2`），第一版 `index.html`、`app.css`、`app.js` 留在 `/v1`；`test/` 是 GPU 排查用的测试页；另有提示音、厂商图标 |
 | `models/kws-zh/` | 唤醒词模型 |
 | `deploy/thinksmart-client.service` | 系统服务 |
 

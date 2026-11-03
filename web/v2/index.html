@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>小麦</title>
+<title>小舒</title>
 <link rel="stylesheet" href="/static/v2/app.css">
 </head>
 <body data-state="idle" class="fresh">
@@ -14,7 +14,7 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round">
           <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
       </div>
-      <div class="name">小麦</div>
+      <div class="name">小舒</div>
     </div>
     <button class="model-pill" id="modelPill" aria-label="切换模型">
       <img class="tile" id="pillLogo" alt="">
@@ -42,24 +42,13 @@
 
   <main class="main">
     <section class="stage">
-      <div class="orb" id="orb">
-        <!-- static pre-rendered glows, one per state; only opacity changes (cross-fade) -->
-        <div class="glows" aria-hidden="true">
-          <i class="g-idle"></i><i class="g-connecting"></i><i class="g-listening"></i><i class="g-thinking"></i><i class="g-speaking"></i>
-        </div>
-        <div class="corona" id="corona"></div>
-        <div class="core" id="core">
-          <i class="c-idle"></i><i class="c-connecting"></i><i class="c-listening"></i><i class="c-thinking"></i><i class="c-speaking"></i>
-          <!-- the orb's face: eyes, cheeks and mouth; expressions follow body[data-state] -->
-          <div class="face" id="face" aria-hidden="true">
-            <span class="eye eye-l"><u></u></span><span class="eye eye-r"><u></u></span>
-            <span class="cheek cheek-l"></span><span class="cheek cheek-r"></span>
-            <span class="mouth" id="mouth"></span>
-          </div>
-          <b class="gloss"></b>
-        </div>
+      <!-- role B: 800×1280 frames. connecting uses idle; thinking uses listen. -->
+      <div class="pet" id="pet" aria-hidden="true">
+        <img class="pet-frame pet-idle" src="/static/v2/roles/role_b_idle.png" alt="">
+        <img class="pet-frame pet-listen" src="/static/v2/roles/role_b_listen.png" alt="">
+        <img class="pet-frame pet-speak" src="/static/v2/roles/role_b_speak.png" alt="">
       </div>
-      <h1 class="title" id="title">说<em>「小麦小麦」</em></h1>
+      <h1 class="title" id="title">说<em>「小舒小舒」</em></h1>
       <p class="hint" id="hint">或者点麦克风；按住可以直接说</p>
       <div class="controls">
         <button class="ctl" id="btnAbort" aria-label="打断">
@@ -141,7 +130,7 @@
     <div class="opt">
       <div class="opt-text">
         <b>自动熄屏</b>
-        <span>一段时间没碰屏幕、也没在对话就熄屏；碰一下屏幕、走近或叫「小麦小麦」就亮。关掉就一直亮着，睡眠时段照常调暗。</span>
+        <span>一段时间没碰屏幕、也没在对话就熄屏；碰一下屏幕、走近或叫「小舒小舒」就亮。关掉就一直亮着，睡眠时段照常调暗。</span>
       </div>
       <button class="switch" id="offSwitch" role="switch" aria-checked="true" aria-label="自动熄屏"><i></i></button>
     </div>
@@ -163,7 +152,7 @@
         <div class="stepper"><button data-k="end" data-d="-30" aria-label="提前半小时">−</button><b id="sleepEnd">07:00</b><button data-k="end" data-d="30" aria-label="推后半小时">+</button></div></div>
     </div>
     <p class="opt-note" id="sleepNote"></p>
-    <p class="opt-note">也可以直接说：「小麦小麦，晚上十点到早上七点别念了」「关掉睡眠模式」</p>
+    <p class="opt-note">也可以直接说：「小舒小舒，晚上十点到早上七点别念了」「关掉睡眠模式」</p>
     <div class="opt">
       <div class="opt-text">
         <b>聊天记录</b>
@@ -171,7 +160,7 @@
       </div>
       <button class="upd-btn clear-btn" id="clearBtn">清除</button>
     </div>
-    <p class="opt-note">也可以直接说：「小麦小麦，清除聊天记录」，它会再问一遍。<button class="link-btn" id="clearMemBtn">只清除记忆、保留记录</button></p>
+    <p class="opt-note">也可以直接说：「小舒小舒，清除聊天记录」，它会再问一遍。<button class="link-btn" id="clearMemBtn">只清除记忆、保留记录</button></p>
     <div class="opt">
       <div class="opt-text">
         <b>本机 IP</b>
