@@ -1233,10 +1233,11 @@ class Client:
             await self._hold_speaker(ring['volume'])
             note = asyncio.create_task(self._speech('，'.join(ring['notes']))) if ring['notes'] else None
             clips = {}
+            phrase = alarms.tone(self.alarm_tone)
             end = time.monotonic() + alarms.RING_SECONDS
             while time.monotonic() < end:
                 if self.audio.player.buffered() < 0.3:
-                    sound = [alarms.tone(self.alarm_tone)]
+                    sound = [phrase]
                     if note and note.done():
                         sound += self._clip_sound(note.result())   # once, after the first tone it is ready for
                         note = None

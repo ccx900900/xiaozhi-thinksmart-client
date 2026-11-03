@@ -26,7 +26,6 @@ import os
 import pathlib
 import re
 import time
-from functools import lru_cache
 
 import numpy as np
 
@@ -443,10 +442,9 @@ def _place(parts, total):
     return out
 
 
-@lru_cache(maxsize=None)
 def tone(name, peak=0.6):
-    """One phrase of the ring tone, then TONE_GAP of silence, as 48 kHz stereo float32 (cached: a ring
-    asks for it every round; nobody writes into it)."""
+    """One phrase of the ring tone, then TONE_GAP of silence, as 48 kHz stereo float32. Not cached: the
+    piano piece is ~10 MB as float32, held only while it rings."""
     if name in FILE_TONES:
         x = load_wav(SOUNDS / FILE_TONES[name])
         return np.concatenate([x, np.zeros((int(OUT_RATE * TONE_GAP), 2), np.float32)])
