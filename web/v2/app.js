@@ -12,6 +12,7 @@ const ui = {
   models: { current: null, options: [] },
   thread: { entry: null, messages: [] },
   ptt: false,
+  alarms: { synced: true, items: [], missed: [], ringing: null, volume: 70, tone: 'marimba', tones: {} },
 };
 
 const SUGGEST = [
@@ -30,6 +31,8 @@ function tick() {
   $('bigDate').textContent = `${now.getMonth() + 1}月${now.getDate()}日  星期${WEEK[now.getDay()]}`;
   const h = now.getHours();
   $('greet').textContent = h < 5 ? '夜深了' : h < 9 ? '早上好' : h < 12 ? '上午好' : h < 14 ? '中午好' : h < 18 ? '下午好' : h < 23 ? '晚上好' : '夜深了';
+  $('ringTime').textContent = hm;
+  tickAlarms();
 }
 
 /* ---- the orb's corona: 48 bars around the orb, one shape per state ----
@@ -219,6 +222,7 @@ function renderStatus() {
   renderSettings();
   renderBright();
   renderScreenOff();
+  renderVol();
   renderUpdate();
 }
 
@@ -405,6 +409,156 @@ async function sendScreenOff(changes) {
 }
 $('offSwitch').addEventListener('click', () => sendScreenOff({ enabled: !offSetting().enabled }));
 for (const b of $('offMinutes').children) b.addEventListener('click', () => sendScreenOff({ minutes: Number(b.dataset.m) }));
+
+/* ---- settings: volumes (the device's, which the keys and voice change too, and the alarms' own) ---- */
+// Same finger-following slider as the brightness: at most one change every 150 ms while dragging, the
+// last one on release; what the client says meanwhile doesn't move the thumb under the finger.
+function slider(id, numId, get, send) {
+  const el = $(id);
+  let edit = null, timer = null, sent = 0, drag = false;
+  function render() {
+    const v = edit === null ? get() : edit;
+    if (edit === null && v != null) el.value = v;
+    el.style.setProperty('--fill', (v == null ? 0 : v) + '%');
+    $(numId).textContent = v == null ? '' : v + '%';
+  }
+  function move(e) {
+    const r = el.getBoundingClientRect(), thumb = 48;
+    edit = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left - thumb / 2) / (r.width - thumb))) * 100);
+    el.value = edit;
+    render();
+    clearTimeout(timer);
+    const go = () => { sent = Date.now(); send(edit); };
+    if (Date.now() - sent > 150) go();
+    else timer = setTimeout(go, 150);
+  }
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    drag = true;
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* keeps following without capture */ }
+    move(e);
+  });
+  el.addEventListener('pointermove', e => { if (drag) move(e); });
+  function drop() {
+    if (!drag) return;
+    drag = false;
+    clearTimeout(timer);
+    const v = edit;
+    Promise.resolve(send(v)).then(() => { if (edit === v) edit = null; render(); });
+  }
+  el.addEventListener('pointerup', drop);
+  el.addEventListener('pointercancel', drop);
+  return render;
+}
+async function postJson(path, body) {
+  try {
+    const r = await (await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                         body: JSON.stringify(body || {}) })).json();
+    if (r.ok === false) toast(r.error || '没保存上', 'error');
+    return r;
+  } catch (e) {
+    toast('没保存上：客户端没有响应', 'error');
+    return { ok: false };
+  }
+}
+const renderVol = slider('volRange', 'volNum', () => ui.status.volume,
+  v => (DEMO ? (ui.status.volume = v) : postJson('/api/volume', { volume: v })));
+const renderAlarmVol = slider('alarmVolRange', 'alarmVolNum', () => ui.alarms.volume,
+  v => (DEMO ? (ui.alarms.volume = v) : postJson('/api/alarm-volume', { volume: v })));
+
+/* ---- countdowns, alarms and reminders (alarms.py: the client keeps and rings them) ---- */
+const KIND_ICON = { timer: '计时', alarm: '闹钟', reminder: '提醒' };
+const now_s = () => Date.now() / 1000;
+function hhmm(t) {
+  const d = new Date(t * 1000);
+  return pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function dayText(t) {
+  const d = new Date(t * 1000), today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - today) / 86400000);
+  return ['今天', '明天', '后天'][days] || `${d.getMonth() + 1}月${d.getDate()}日 星期${WEEK[d.getDay()]}`;
+}
+function left(t) {
+  const s = Math.max(0, Math.round(t - now_s()));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return (h ? h + ':' + pad(m) : m) + ':' + pad(s % 60);
+}
+function alarmRow(v) {
+  if (v.kind === 'timer') {
+    return [`<span data-left="${v.at}">${left(v.at)}</span>${v.label ? ' ' + esc(v.label) : ''}`,
+            `倒计时，${hhmm(v.at)} 响${v.snoozed ? ' · 再睡中' : ''}`];
+  }
+  const sub = [dayText(v.at)];
+  if (v.repeat) sub.push(esc(v.repeat));
+  if (v.snoozed) sub.push('再睡中');
+  if (v.kind === 'reminder') sub.push(v.spoken ? '到点念出来' : v.spoken === false ? '只响铃（没合成出语音）' : '正在合成语音');
+  return [`${hhmm(v.at)}${v.label ? ' ' + esc(v.label) : ''}`, sub.join(' · ')];
+}
+function renderAlarms() {
+  const a = ui.alarms;
+  document.body.classList.toggle('alarms-paused', !a.synced);
+  document.body.classList.toggle('ringing', !!a.ringing);
+  document.body.classList.toggle('has-timer', a.items.some(v => v.kind === 'timer'));
+  // home: the running countdowns and the next alarm or reminder
+  const timers = a.items.filter(v => v.kind === 'timer').slice(0, 3);
+  const next = a.items.find(v => v.kind !== 'timer');
+  const chips = timers.map(v => `<div class="na timer">倒计时 <b data-left="${v.at}">${left(v.at)}</b>${v.label ? esc(v.label) : ''}</div>`);
+  if (next) chips.push(`<div class="na">${KIND_ICON[next.kind]} <b>${dayText(next.at)} ${hhmm(next.at)}</b>${esc(next.label || '')}</div>`);
+  if (!a.synced && a.items.length) chips.unshift('<div class="na paused">时间未同步，闹钟暂停</div>');
+  $('nextAlarms').innerHTML = chips.join('');
+  // settings: the list, the tones, the missed ones
+  $('alarmCount').textContent = a.items.length ? `${a.items.length} 条` : '';
+  $('alarmList').innerHTML = a.items.length ? a.items.map(v => {
+    const [main, sub] = alarmRow(v);
+    return `<div class="al ${v.kind}"><i>${KIND_ICON[v.kind]}</i><div class="al-text"><b>${main}</b><span>${sub}</span></div>` +
+      `<button class="al-del" data-id="${v.id}">删除</button></div>`;
+  }).join('') : '<div class="alarm-empty">还没有闹钟和提醒</div>';
+  $('tones').innerHTML = Object.entries(a.tones || {}).map(([k, name]) =>
+    `<button data-tone="${esc(k)}" class="${k === a.tone ? 'on' : ''}">${esc(name)}</button>`).join('');
+  $('missedBox').hidden = !a.missed.length;
+  $('missedList').innerHTML = a.missed.map(m =>
+    `<div class="al gone"><i>${KIND_ICON[m.kind] || ''}</i><div class="al-text"><b>${hhmm(m.at)}${m.label ? ' ' + esc(m.label) : ''}</b>` +
+    `<span>${dayText(m.at)} · ${m.why === 'off' ? '设备关着，错过了' : '响了 10 分钟没人停'}</span></div></div>`).join('');
+  renderAlarmVol();
+  renderRing();
+  tickAlarms();
+}
+function renderRing() {
+  const r = ui.alarms.ringing;
+  if (!r) return;
+  const items = r.items || [];
+  $('ringKind').textContent = [...new Set(items.map(v => v.type))].join('、') || '闹钟';
+  $('ringLabel').textContent = items.map(v => v.label).filter(Boolean).join('、');
+  $('ringNote').textContent = (r.notes || []).join('；');
+}
+function tickAlarms() {
+  for (const el of document.querySelectorAll('[data-left]')) el.textContent = left(Number(el.dataset.left));
+  const timer = ui.alarms.items.find(v => v.kind === 'timer');
+  $('timerText').textContent = timer ? left(timer.at) : '';
+}
+$('alarmList').addEventListener('click', e => {
+  const b = e.target.closest('.al-del');
+  if (!b) return;
+  if (!b.classList.contains('armed')) {
+    b.classList.add('armed');
+    b.textContent = '确认删除';
+    setTimeout(() => { b.classList.remove('armed'); b.textContent = '删除'; }, 4000);
+    return;
+  }
+  if (DEMO) { ui.alarms.items = ui.alarms.items.filter(v => v.id !== Number(b.dataset.id)); return renderAlarms(); }
+  postJson('/api/alarms/delete', { id: Number(b.dataset.id) }).then(r => { if (r.ok) toast('已删除'); });
+});
+$('tones').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (DEMO) { ui.alarms.tone = b.dataset.tone; return renderAlarms(); }
+  postJson('/api/alarm-tone', { tone: b.dataset.tone }).then(() => postJson('/api/alarm-tone', { tone: b.dataset.tone, preview: true }));
+});
+$('missedClear').addEventListener('click', () => (DEMO ? handlers.alarms(Object.assign({}, ui.alarms, { missed: [] }))
+                                                       : postJson('/api/alarms/missed/clear')));
+$('ringStop').addEventListener('click', () => post('/api/alarms/stop'));
+$('ringSnooze').addEventListener('click', () => { post('/api/alarms/snooze'); toast('好的，10 分钟后再叫你'); });
 
 /* ---- settings: software update (update.py: the root updater installs, the page only asks) ---- */
 const UPD_STAGE = { preparing: '正在准备', downloading: '正在下载', installing: '正在安装',
@@ -716,7 +870,8 @@ const handlers = {
     for (const k in seenThreads) delete seenThreads[k];
     seenThreads[s.thread.entry] = s.thread.messages;
     if (s.update) { ui.version = s.version; ui.update = s.update; }   // the demo's snapshots have none
-    renderModels(); renderThread(); renderStatus();
+    if (s.alarms) ui.alarms = s.alarms;
+    renderModels(); renderThread(); renderStatus(); renderAlarms();
     updateFinished((s.update || {}).job);
   },
   power(p) {
@@ -744,7 +899,14 @@ const handlers = {
   },
   message: m => upsertMessage(m),
   toast: t => toast(t.text, t.kind),
-  volume: v => showVolume(v.volume),
+  volume(v) {
+    // a ring's own volume (keys while it rings) is shown, but isn't the device volume
+    if (!v.ring) { ui.status.volume = v.volume; renderVol(); }
+    if (v.source !== 'page') showVolume(v.volume);
+  },
+  alarms(a) {
+    ui.alarms = a; renderAlarms();
+  },
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);
   },
@@ -852,9 +1014,26 @@ const demo = DEMO === null ? null : (() => {
     handlers.level({ mic: v * .07, out: v * .17 });
   }, 100);
 
+  const tones = { marimba: '清晨木琴', bell: '钟声', beep: '经典滴滴' };
+  const alarmsDemo = () => ({
+    synced: true, volume: 70, tone: 'marimba', tones, ringing: null,
+    items: [
+      { id: 3, kind: 'timer', type: '倒计时', label: '煮鸡蛋', at: now() + 271, repeat: '', snoozed: false },
+      { id: 1, kind: 'alarm', type: '闹钟', label: '起床', at: now() + 9 * 3600, repeat: '每个工作日（周一到周五）', snoozed: false },
+      { id: 2, kind: 'reminder', type: '提醒', label: '晾衣服', at: now() + 26 * 3600, repeat: '', snoozed: false, spoken: true },
+    ],
+    missed: [{ kind: 'alarm', label: '吃药', at: now() - 20 * 3600, why: 'unanswered', noted: now() - 20 * 3600 }],
+  });
   const steps = [
-    ['idle', 4000, () => handlers.snapshot({ status: { state: 'idle', connected: false, uploading: false },
-                                              models: { current: options[0], options }, thread: { entry: options[0].entry, messages: [] } })],
+    ['idle', 4000, () => {
+      handlers.snapshot({ status: { state: 'idle', connected: false, uploading: false, volume: 60 }, alarms: alarmsDemo(),
+                          models: { current: options[0], options }, thread: { entry: options[0].entry, messages: [] } });
+    }],
+    ['settings', 3000, () => $('settings').classList.add('on')],
+    [null, 300, () => $('settings').classList.remove('on')],
+    ['ring', 4000, () => handlers.alarms(Object.assign(alarmsDemo(), {
+      ringing: { items: [alarmsDemo().items[1]], notes: [], started: now() } }))],
+    [null, 300, () => handlers.alarms(alarmsDemo())],
     ['connecting', 1600, () => state('connecting', false)],
     ['listening', 3200, () => state('listening')],
     [null, 500, () => say('user', '明天北京天气怎么样？适合去爬山吗？')],
@@ -914,6 +1093,7 @@ const demo = DEMO === null ? null : (() => {
     else if (path === '/api/text') answer(body.text);
     else if (path === '/api/abort') { done(true); state('idle'); }
     else if (path === '/api/end') { done(); state('idle', false); }
+    else if (path.startsWith('/api/alarms/')) handlers.alarms(Object.assign({}, ui.alarms, { ringing: null }));
     return Promise.resolve();
   }
 

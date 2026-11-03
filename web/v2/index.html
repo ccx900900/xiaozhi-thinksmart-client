@@ -26,6 +26,11 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
         <span id="reportText">有一条待汇报</span>
       </button>
+      <div class="timer-chip" id="timerChip">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 1.5M9.5 3h5"/></svg>
+        <span id="timerText"></span>
+      </div>
       <div class="sleep-chip" id="sleepChip">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
@@ -81,6 +86,7 @@
         <div class="greet" id="greet">你好</div>
         <div class="big-time" id="bigTime">--:--</div>
         <div class="big-date" id="bigDate"></div>
+        <div class="next-alarms" id="nextAlarms"></div>
         <div class="try">试试这样问我</div>
         <div class="chips" id="chips"></div>
       </div>
@@ -138,6 +144,33 @@
       </div>
       <p class="opt-note" id="brightNote"></p>
     </div>
+    <div class="bright vol">
+      <div class="bright-head"><b>设备音量</b><span class="bright-num" id="volNum"></span></div>
+      <div class="bright-row">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/></svg>
+        <input type="range" class="range" id="volRange" min="0" max="100" step="1" aria-label="设备音量">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+      </div>
+      <div class="bright-head"><b>闹钟音量</b><span class="bright-num" id="alarmVolNum"></span></div>
+      <div class="bright-row">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="6.5"/><path d="M12 10.5v3l2 1.2"/></svg>
+        <input type="range" class="range" id="alarmVolRange" min="0" max="100" step="1" aria-label="闹钟音量">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 1.5M4 5.5 6.5 3M20 5.5 17.5 3"/></svg>
+      </div>
+      <p class="opt-note">设备音量是平时说话的音量，和音量键、语音调的是同一个。闹钟音量只管倒计时、闹钟和提醒：响铃时自动切过去，响完改回来；响铃时按音量键只调这一次。</p>
+    </div>
+    <div class="alarms-card">
+      <div class="bright-head"><b>闹钟和提醒</b><span class="bright-num" id="alarmCount"></span></div>
+      <p class="alarm-warn" id="alarmWarn">设备时间还没和网络同步，闹钟暂停，同步后自动恢复</p>
+      <div class="alarm-list" id="alarmList"></div>
+      <p class="opt-note">直接说：「小麦小麦，明早 7 点叫我」「倒计时 5 分钟」「10 分钟后提醒我晾衣服」「工作日早上 7 点半叫我」「我有哪些闹钟」「取消明早的闹钟」</p>
+      <div class="bright-head"><b class="sub">铃声</b><span class="bright-num">点一下试听</span></div>
+      <div class="minutes tones" id="tones"></div>
+      <div class="missed" id="missedBox">
+        <div class="bright-head"><b class="sub">错过的</b><span class="bright-num"></span><button class="link-btn" id="missedClear">清除</button></div>
+        <div class="alarm-list" id="missedList"></div>
+      </div>
+    </div>
     <div class="opt">
       <div class="opt-text">
         <b>自动熄屏</b>
@@ -189,6 +222,19 @@
   </div>
 </div>
 
+<div class="ring" id="ring">
+  <svg class="ring-bell" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>
+  <div class="ring-kind" id="ringKind">闹钟</div>
+  <div class="ring-time" id="ringTime">--:--</div>
+  <div class="ring-label" id="ringLabel"></div>
+  <div class="ring-note" id="ringNote"></div>
+  <div class="ring-btns">
+    <button class="ring-snooze" id="ringSnooze">再睡 10 分钟</button>
+    <button class="ring-stop" id="ringStop">停止</button>
+  </div>
+  <p class="ring-hint">也可以喊「小麦小麦」停下</p>
+</div>
 <div class="power-off" id="powerOff"><b>正在关机</b><span>屏幕变黑后等 10 秒再拔掉电源</span></div>
 <div class="toast" id="toast"></div>
 <div class="hud" id="hud">
