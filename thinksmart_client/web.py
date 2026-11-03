@@ -104,7 +104,9 @@ def make_app(client: Client):
     async def alarm_tone(request):
         body = await request.json()
         try:
-            if body.get('preview'):
+            if body.get('stop'):
+                await client._stop_preview()      # the settings closed while a tone was being tried
+            elif body.get('preview'):
                 await client.preview_tone(body.get('tone'))
             else:
                 client.set_alarm_tone(body.get('tone'))

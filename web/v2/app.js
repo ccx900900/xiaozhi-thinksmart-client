@@ -718,7 +718,10 @@ $('powerBtn').addEventListener('click', async () => {
   const r = await (await post('/api/power-off', {}))?.json?.();
   if (!r || !r.ok) toast((r && r.error) || '没能关机', 'error');
 });
-$('settingsClose').addEventListener('click', () => $('settings').classList.remove('on'));
+$('settingsClose').addEventListener('click', () => {
+  $('settings').classList.remove('on');
+  if (!DEMO) postJson('/api/alarm-tone', { stop: true });   // a tone being tried stops with the settings
+});
 $('reportPill').addEventListener('click', () => { post('/api/reports/play'); toast('马上念给你听'); });
 
 /* ---- right side: welcome screen or conversation ---- */

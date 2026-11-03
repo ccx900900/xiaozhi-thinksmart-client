@@ -630,3 +630,17 @@ def test_tone_choices():
     for name, f in alarms.FILE_TONES.items():
         assert (alarms.SOUNDS / f).exists(), f
     assert len(alarms.reminder_chime()) / OUT_RATE < 4
+
+
+@pytest.mark.asyncio
+async def test_closing_the_settings_stops_a_preview(tmp_path, monkeypatch):
+    from aiohttp.test_utils import TestClient, TestServer
+    from thinksmart_client import web as web_mod
+    sp = Speaker(monkeypatch, 40)
+    c = make_client(tmp_path, monkeypatch)
+    async with TestClient(TestServer(web_mod.make_app(c))) as http:
+        assert (await (await http.post('/api/alarm-tone', json={'tone': 'coffee', 'preview': True})).json())['ok']
+        await asyncio.sleep(0.05)
+        assert sp.volume == 70 and c.audio.player.buffered() > 1
+        assert (await (await http.post('/api/alarm-tone', json={'stop': True})).json())['ok']
+        assert sp.volume == 40 and c.audio.player.buffered() < 0.01 and c.preview is None
