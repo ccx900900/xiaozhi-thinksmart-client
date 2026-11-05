@@ -13,6 +13,7 @@ const ui = {
   thread: { entry: null, messages: [] },
   ptt: false,
   alarms: { synced: true, items: [], missed: [], ringing: null, volume: 70, tone: 'coffee', tones: {} },
+  bluetooth: null,
 };
 
 const SUGGEST = [
@@ -702,7 +703,287 @@ async function renderIp() {
   $('ipNum').textContent = ip || '未联网';
   $('ipSub').textContent = ip ? `在同一网络的电脑上打开 http://${ip}:16688/admin 进网关后台` : '连上 WiFi 后这里显示设备的地址';
 }
-$('btnSettings').addEventListener('click', () => { $('settings').classList.add('on'); renderIp(); });
+$('btnSettings').addEventListener('click', () => { $('settings').classList.add('on'); renderIp(); renderWifiCard(); });
+/* ---- settings: WiFi (the kiosk shell scans and joins: thinksmart-kiosk.py, the same code as its welcome page) ---- */
+// The shell answers the client's page only on the device's own screen (127.0.0.1); window.thinksmartShell
+// says it can. An older shell can't: the card then only says so.
+const shell = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.thinksmart;
+const shellWifi = !!(shell && window.thinksmartShell && window.thinksmartShell.wifi);
+const shellCalls = {};
+let shellSeq = 0;
+function shellCall(cmd, args) {
+  return new Promise(resolve => {
+    const id = ++shellSeq;
+    shellCalls[id] = resolve;
+    const msg = Object.assign({ id, cmd }, args || {});
+    if (shellWifi) shell.postMessage(JSON.stringify(msg));
+    else wifiMock(msg);
+  });
+}
+window.thinksmartReply = function (r) {
+  const done = shellCalls[r.id];
+  delete shellCalls[r.id];
+  if (done) done(r);
+};
+// outside the kiosk (a desktop browser, ?demo): pretend to be a device; password "wrongpass" fails
+function wifiMock(m) {
+  const reply = (r, ms) => setTimeout(() => window.thinksmartReply(Object.assign({ id: m.id }, r)), ms);
+  if (DEMO === null) return reply({ ok: false, reason: 'noshell' }, 0);
+  if (m.cmd === 'wifi_status') reply({ ok: true, ssid: 'Home_5G', signal: 82 }, 100);
+  else if (m.cmd === 'scan') reply({ ok: true, networks: [
+    { ssid: 'Home_5G', signal: 82, secure: true, active: true, saved: true },
+    { ssid: 'Home', signal: 70, secure: true, saved: true },
+    { ssid: '客厅的 WiFi', signal: 54, secure: true },
+    { ssid: 'Guest', signal: 40, secure: false },
+    { ssid: 'TP-LINK_8A2C', signal: 22, secure: true },
+  ] }, 700);
+  else if (m.cmd === 'connect') {
+    ['scan', 'join', 'auth', 'ip'].forEach((s, i) => setTimeout(() => window.thinksmartProgress({ id: m.id, stage: s }), 300 + i * 400));
+    reply(m.password === 'wrongpass' ? { ok: false, reason: 'password' } : { ok: true }, 2000);
+  } else reply({ ok: true }, 200);
+}
+
+const WIFI_REASONS = {
+  password: '密码不对，请再试一次',
+  notfound: '找不到这个网络，可能离得太远或名称有误',
+  timeout: '连接超时，请靠近路由器后再试',
+};
+const WIFI_STAGES = { scan: '正在搜索网络…', join: '正在连接路由器…', auth: '正在验证密码…', ip: '密码正确，正在获取网络地址…' };
+const wifi = { nets: [], target: null, ssid: '', pw: '', showPw: false, busy: false, connectId: null };
+const signalText = s => s > 75 ? '信号很好' : s > 50 ? '信号良好' : s > 25 ? '信号一般' : '信号较弱';
+
+async function renderWifiCard() {
+  if (!shellWifi && DEMO === null) {
+    $('wifiSub').textContent = '这台设备的系统层版本较旧，不能在这里切换 WiFi。按系统镜像 README 更新系统层后就可以。';
+    $('wifiBtn').hidden = true;
+    return;
+  }
+  const r = await shellCall('wifi_status');
+  $('wifiSub').textContent = !r.ok ? '读不到 WiFi 状态' : r.ssid ? `已连接 ${r.ssid} · ${signalText(r.signal)}` : '没有连接 WiFi';
+}
+function openWifi() {
+  $('wifi').classList.add('on');
+  wifiList();
+  wifiScan();
+}
+function closeWifi() {
+  if (wifi.busy) return;   // a connection attempt is on: it rolls back by itself if it fails
+  if (document.activeElement) document.activeElement.blur();
+  $('wifi').classList.remove('on');
+  renderWifiCard();
+  renderIp();
+}
+function wifiPane(id) {
+  for (const p of document.querySelectorAll('.w-pane')) p.classList.toggle('on', p.id === id);
+}
+function wifiList() {
+  if (document.activeElement) document.activeElement.blur();
+  wifiPane('wList');
+  renderNets();
+}
+async function wifiScan() {
+  $('wScan').classList.add('spin');
+  if (!wifi.nets.length) $('wNets').innerHTML = '<div class="w-empty">正在搜索附近的 WiFi…</div>';
+  const r = await shellCall('scan');
+  $('wScan').classList.remove('spin');
+  wifi.nets = r.ok ? r.networks : [];
+  renderNets(r.ok ? '' : '搜索失败，点右上角刷新再试');
+}
+function bars(signal) {
+  const lit = signal > 75 ? 4 : signal > 50 ? 3 : signal > 25 ? 2 : 1;
+  return '<span class="bars">' + [1, 2, 3, 4].map(i => `<i class="${i <= lit ? 'lit' : ''}"></i>`).join('') + '</span>';
+}
+const LOCK = '<svg class="w-lock" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b6c0e2" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+function renderNets(error) {
+  const box = $('wNets');
+  if (error || !wifi.nets.length) {
+    box.innerHTML = `<div class="w-empty">${esc(error || '附近没有搜到 WiFi')}</div>`;
+    return;
+  }
+  box.innerHTML = wifi.nets.map((n, i) =>
+    `<button class="w-net${n.active ? ' cur' : ''}" data-i="${i}">${bars(n.signal)}<span class="name">${esc(n.ssid)}</span>` +
+    (n.active ? '<span class="meta">已连接</span>' : n.saved ? '<span class="meta saved">已保存</span>' : '') +
+    (n.secure ? LOCK : '') + '</button>').join('');
+}
+$('wNets').addEventListener('click', e => {
+  const b = e.target.closest('.w-net');
+  if (b) wifiJoin(wifi.nets[Number(b.dataset.i)], false);
+});
+
+// mode: 'type' (enter a password), 'saved' (a saved network: connect or forget), 'info' (the one
+// connected: forget). Saved networks wait for a tap on 连接 so 忘记 stays reachable.
+function wifiJoin(net, hidden) {
+  wifi.target = { ssid: net ? net.ssid : '', secure: net ? net.secure : true, hidden, saved: !!(net && net.saved),
+                  mode: net && net.active ? 'info' : net && net.saved ? 'saved' : 'type' };
+  wifi.ssid = wifi.target.ssid;
+  wifi.pw = '';
+  wifi.showPw = false;
+  const t = wifi.target, q = net ? signalText(net.signal) : '';
+  $('wJoinTitle').textContent = hidden ? '添加隐藏网络' : t.ssid;
+  $('wJoinHint').textContent = hidden ? '输入网络名称和密码（没有密码就留空），然后点键盘上的「连接」'
+    : t.mode === 'info' ? '已连接 · ' + q
+    : t.mode === 'saved' ? '已保存的网络 · ' + q + '，点「连接」用保存的密码连接'
+    : t.secure ? '加密网络 · ' + q + '，输入密码后点键盘上的「连接」' : '开放网络 · ' + q;
+  wifiMsg('');
+  wifiPane('wJoin');
+  renderJoin();
+  if (t.mode === 'type' && !t.secure && !hidden) wifiConnect();   // open network: nothing to type
+  else wifiFocus();
+}
+const typing = () => wifi.target.mode === 'type';
+// the system keyboard (injected by the kiosk shell) comes up with the focused field
+function wifiFocus() {
+  if (!typing() || wifi.busy) return;
+  const t = wifi.target;
+  const el = t.hidden && !wifi.ssid ? $('wSsid') : t.secure ? $('wPw') : $('wSsid');
+  setTimeout(() => el.focus(), 50);
+}
+function canConnect() {
+  const t = wifi.target;
+  // a hidden network may be open: an empty password is allowed there, 1-7 characters never are
+  const pwOk = t.hidden ? (wifi.pw.length === 0 || wifi.pw.length >= 8) : (!t.secure || wifi.pw.length >= 8);
+  return !wifi.busy && (!t.hidden || wifi.ssid.length > 0) && pwOk;
+}
+function renderJoin() {
+  const t = wifi.target;
+  if ($('wSsid').value !== wifi.ssid) $('wSsid').value = wifi.ssid;
+  if ($('wPw').value !== wifi.pw) $('wPw').value = wifi.pw;
+  $('wPw').type = wifi.showPw ? 'text' : 'password';
+  $('wPw').placeholder = t.hidden ? '没有密码就留空' : '至少 8 位';
+  $('wSsid').disabled = $('wPw').disabled = wifi.busy;
+  $('wEye').textContent = wifi.showPw ? '隐藏' : '显示';
+  $('wFieldSsid').style.display = typing() && t.hidden ? '' : 'none';
+  $('wFieldPw').style.display = typing() && t.secure ? '' : 'none';
+  $('wForget').hidden = !(t.saved || t.mode === 'info');
+  $('wJoinBtn').hidden = t.mode !== 'saved';
+  $('wJoinBtn').disabled = $('wForget').disabled = wifi.busy;
+}
+function wifiMsg(text, kind) {
+  $('wMsg').className = 'w-msg' + (kind ? ' ' + kind : '');
+  $('wMsg').innerHTML = (kind === 'wait' ? '<span class="w-spin"></span>' : '') + esc(text);
+}
+async function wifiConnect() {
+  const t = wifi.target;
+  if (t.mode !== 'saved' && !canConnect()) return;
+  wifi.busy = true;
+  renderJoin();
+  const usingSaved = t.mode === 'saved';
+  wifiMsg(usingSaved ? `正在用已保存的密码连接 ${wifi.ssid}…` : `正在连接 ${wifi.ssid}…`, 'wait');
+  wifi.connectId = shellSeq + 1;   // the id shellCall() is about to use: progress reports carry it
+  const r = await shellCall('connect', { ssid: wifi.ssid, password: usingSaved || !t.secure ? '' : wifi.pw, hidden: !!t.hidden });
+  wifi.connectId = null;
+  wifi.busy = false;
+  if (r.ok) {
+    t.mode = 'info';
+    t.saved = true;
+    wifiMsg(`已连接 ${wifi.ssid}`, 'ok');
+    renderJoin();
+    setTimeout(() => { if (!wifi.busy && $('wJoin').classList.contains('on')) { wifiList(); wifiScan(); } }, 1500);
+    return;
+  }
+  // whatever went wrong (the shell already went back to the previous network), let the user type a password next
+  if (t.secure) t.mode = 'type';
+  if (r.reason === 'password') wifi.pw = '';
+  wifiMsg(usingSaved && r.reason === 'password' ? '保存的密码已失效，请重新输入'
+    : WIFI_REASONS[r.reason] || ('连接失败' + (r.detail ? '：' + r.detail : '')) + '，已连回原来的网络', 'bad');
+  renderJoin();
+  wifiFocus();
+}
+window.thinksmartProgress = function (p) {
+  if (wifi.busy && p.id === wifi.connectId && WIFI_STAGES[p.stage]) wifiMsg(WIFI_STAGES[p.stage], 'wait');
+};
+async function wifiForget() {
+  if (wifi.busy) return;
+  const ssid = wifi.target.ssid;
+  wifi.busy = true;
+  wifiMsg(`正在忘记 ${ssid}…`, 'wait');
+  renderJoin();
+  await shellCall('forget', { ssid });
+  wifi.busy = false;
+  wifi.target.saved = false;
+  wifiMsg(`已忘记 ${ssid}，下次连接需要重新输入密码`, 'ok');
+  renderJoin();
+  wifi.nets = wifi.nets.map(n => n.ssid === ssid ? Object.assign({}, n, { saved: false }) : n);
+  setTimeout(() => { if (!wifi.busy) { wifiList(); wifiScan(); } }, 1400);
+}
+$('wifiBtn').addEventListener('click', openWifi);
+$('wClose').addEventListener('click', closeWifi);
+$('wScan').addEventListener('click', wifiScan);
+$('wHidden').addEventListener('click', () => wifiJoin(null, true));
+$('wBack').addEventListener('click', () => { if (!wifi.busy) wifiList(); });
+$('wForget').addEventListener('click', wifiForget);
+$('wJoinBtn').addEventListener('click', wifiConnect);
+$('wEye').addEventListener('pointerdown', e => e.preventDefault());   // keep the field (and the keyboard)
+$('wEye').addEventListener('click', e => { e.preventDefault(); wifi.showPw = !wifi.showPw; renderJoin(); });
+$('wSsid').addEventListener('input', () => { wifi.ssid = $('wSsid').value; });
+$('wPw').addEventListener('input', () => { wifi.pw = $('wPw').value; });
+$('wSsid').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();   // keep the keyboard up: on to the password
+  if (wifi.target.secure) $('wPw').focus();
+});
+$('wPw').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (!canConnect()) { e.preventDefault(); return; }   // keep typing
+  wifiConnect();
+});
+
+/* ---- settings: Bluetooth speaker (bt.py; pairing only in the 3-minute "add a phone" window) ---- */
+function btPlaying(d) {
+  const song = [d.title, d.artist].filter(Boolean).join(' · ');
+  return song || '正在播放';
+}
+function renderBluetooth() {
+  const b = ui.bluetooth;
+  const on = !!(b && b.available && b.enabled);
+  const live = b && b.enabled && (b.devices || []).find(d => d.streaming);
+  document.body.classList.toggle('bt-playing', !!live);
+  $('btChipText').textContent = live ? `${live.name} · ${btPlaying(live)}` : '';
+  if (!b) return;
+  $('btSwitch').setAttribute('aria-checked', String(on));
+  $('btSwitch').disabled = !b.available;
+  $('btCard').classList.toggle('off', !on);
+  $('btName').textContent = on && b.name ? `手机上显示为「${b.name}」` : '';
+  let note;
+  if (!b.available) note = '找不到蓝牙，或者蓝牙服务没有运行。';
+  else if (!b.enabled) note = '打开后，手机可以把这台设备当蓝牙音箱放歌。';
+  else if (b.window) note = `正在等手机连接（还剩 ${b.window} 秒）：在手机的蓝牙设置里点「${b.name}」，配对不用输密码。`;
+  else note = '连过的手机在蓝牙设置里点一下就能再连上。放歌时说话或闹钟响，歌声会自动变小或暂停。';
+  if (on && b.direct) note += ' 注意：系统层版本较旧，手机的声音没经过客户端，放歌时很难唤醒。';
+  $('btNote').textContent = note;
+  const phones = b.devices || [];
+  $('btList').innerHTML = phones.length ? phones.map(d =>
+    `<div class="al phone${d.streaming ? ' live' : ''}"><i>手机</i><div class="al-text"><b>${esc(d.name)}</b>` +
+    `<span${d.streaming ? ' class="live"' : ''}>${d.streaming ? esc(btPlaying(d)) : d.connected ? '已连接' : '已配对，没连着'}</span></div>` +
+    `<button class="al-del" data-addr="${esc(d.address)}">忘记</button></div>`).join('')
+    : '<div class="alarm-empty">还没有连过的手机</div>';
+  $('btAdd').classList.toggle('on', !!b.window);
+  $('btAdd').textContent = b.window ? `停止等待（${b.window} 秒）` : '＋ 添加手机';
+}
+async function btPost(body) {
+  if (DEMO !== null) {
+    const b = ui.bluetooth;
+    if ('enabled' in body) b.enabled = body.enabled;
+    if ('window' in body) b.window = body.window ? 180 : 0;
+    if (body.remove) b.devices = b.devices.filter(d => d.address !== body.remove);
+    return renderBluetooth();
+  }
+  await postJson('/api/bluetooth', body);
+}
+$('btSwitch').addEventListener('click', () => btPost({ enabled: !(ui.bluetooth && ui.bluetooth.enabled) }));
+$('btAdd').addEventListener('click', () => btPost({ window: !(ui.bluetooth && ui.bluetooth.window) }));
+$('btList').addEventListener('click', e => {
+  const b = e.target.closest('.al-del');
+  if (!b) return;
+  if (!b.classList.contains('armed')) {
+    b.classList.add('armed');
+    b.textContent = '确认忘记';
+    setTimeout(() => { b.classList.remove('armed'); b.textContent = '忘记'; }, 4000);
+    return;
+  }
+  btPost({ remove: b.dataset.addr }).then(() => toast('已忘记，这台手机要重新配对才能连'));
+});
+
 
 // 关机: halts the system (it stays dark with the power cable in), so unplugging can't damage it
 let powerArmed = 0;
@@ -879,7 +1160,8 @@ const handlers = {
     seenThreads[s.thread.entry] = s.thread.messages;
     if (s.update) { ui.version = s.version; ui.update = s.update; }   // the demo's snapshots have none
     if (s.alarms) ui.alarms = s.alarms;
-    renderModels(); renderThread(); renderStatus(); renderAlarms();
+    if (s.bluetooth) ui.bluetooth = s.bluetooth;
+    renderModels(); renderThread(); renderStatus(); renderAlarms(); renderBluetooth();
     updateFinished((s.update || {}).job);
   },
   power(p) {
@@ -914,6 +1196,9 @@ const handlers = {
   },
   alarms(a) {
     ui.alarms = a; renderAlarms();
+  },
+  bluetooth(b) {
+    ui.bluetooth = b; renderBluetooth();
   },
   level(l) {
     level.target = ui.status.state === 'speaking' ? Math.min(1, l.out * 6) : micLevel(l.mic);
@@ -1036,6 +1321,10 @@ const demo = DEMO === null ? null : (() => {
   const steps = [
     ['idle', 4000, () => {
       handlers.snapshot({ status: { state: 'idle', connected: false, uploading: false, volume: 60 }, alarms: alarmsDemo(),
+                          bluetooth: { available: true, enabled: true, powered: true, window: 0, name: 'ThinkSmart View', direct: false,
+                                       devices: [{ address: 'AA:BB:CC:DD:EE:01', name: '小张的 iPhone', paired: true, connected: true, streaming: true,
+                                                   title: '晴天', artist: '周杰伦' },
+                                                 { address: 'AA:BB:CC:DD:EE:02', name: 'Redmi K70', paired: true, connected: false, streaming: false }] },
                           models: { current: options[0], options }, thread: { entry: options[0].entry, messages: [] } });
     }],
     ['settings', 3000, () => $('settings').classList.add('on')],
