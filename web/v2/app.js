@@ -964,8 +964,10 @@ $('wHidden').addEventListener('click', () => wifiJoin(null, true));
 $('wBack').addEventListener('click', () => { if (!wifi.busy) wifiList(); });
 $('wForget').addEventListener('click', wifiForget);
 $('wJoinBtn').addEventListener('click', wifiConnect);
-$('wEye').addEventListener('pointerdown', e => e.preventDefault());   // keep the field (and the keyboard)
-$('wEye').addEventListener('click', e => { e.preventDefault(); wifi.showPw = !wifi.showPw; renderJoin(); });
+// On pointerdown, not click: cancelling a touch's pointerdown (to keep the field focused and the system
+// keyboard up) makes WebKitGTK send no click at all, so a click handler never ran on the device's screen
+// (a mouse in a desktop browser still clicks). The on-screen keyboard's keys work the same way.
+$('wEye').addEventListener('pointerdown', e => { e.preventDefault(); wifi.showPw = !wifi.showPw; renderJoin(); });
 $('wSsid').addEventListener('input', () => { wifi.ssid = $('wSsid').value; });
 $('wPw').addEventListener('input', () => { wifi.pw = $('wPw').value; });
 $('wSsid').addEventListener('keydown', e => {
