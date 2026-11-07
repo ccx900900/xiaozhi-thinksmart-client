@@ -297,6 +297,7 @@ body[data-state="listening"] .mic-ring { opacity: .75; }
 .link-btn.armed { color: var(--bad); font-weight: 600; }
 .upd-notes { margin: 0; padding: 0 30px 0 52px; font-size: 18px; line-height: 1.7; color: var(--ink2); }
 .upd-notes:empty, .upd-bar[hidden] { display: none; }
+.upd-notes li.h { list-style: none; margin: 6px 0 0 -22px; font-weight: 700; color: var(--ink); }
 .upd-bar { height: 10px; margin: 0 6px; border-radius: 5px; background: #ffffff17; overflow: hidden; }
 .upd-bar i { display: block; height: 100%; transform-origin: 0 50%; transform: scaleX(0); transition: transform .4s;
              background: linear-gradient(90deg, var(--accent), var(--accent2)); }
