@@ -1149,7 +1149,9 @@ class Client:
     def background_target(self):
         """How loud a phone's music plays: muted while an alarm rings or a tone is tried, lowered while
         talking (from the wake to the end of the reply) or a local sound plays, else full."""
-        if self.ring or self.preview:
+        # a preview that played to its end stays in self.preview (finished) until the next one:
+        # only one still playing mutes the phone
+        if self.ring or (self.preview and not self.preview.done()):
             return 0.0
         if self.state != 'idle' or self.audio.player.buffered() > 0:
             return BACKGROUND_DUCKED

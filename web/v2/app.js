@@ -939,8 +939,12 @@ async function wifiForget() {
   wifi.busy = true;
   wifiMsg(`正在忘记 ${ssid}…`, 'wait');
   renderJoin();
-  await shellCall('forget', { ssid });
+  const r = await shellCall('forget', { ssid });
   wifi.busy = false;
+  if (!r.ok) {
+    wifiMsg(`没能忘记 ${ssid}，请再试一次`, 'bad');
+    return renderJoin();
+  }
   wifi.target.saved = false;
   wifiMsg(`已忘记 ${ssid}，下次连接需要重新输入密码`, 'ok');
   renderJoin();
@@ -996,11 +1000,16 @@ function renderBluetooth() {
   $('btList').innerHTML = phones.length ? phones.map(d =>
     `<div class="al phone${d.streaming ? ' live' : ''}"><i>手机</i><div class="al-text"><b>${esc(d.name)}</b>` +
     `<span${d.streaming ? ' class="live"' : ''}>${d.streaming ? esc(btPlaying(d)) : d.connected ? '已连接' : '已配对，没连着'}</span></div>` +
-    `<button class="al-del" data-addr="${esc(d.address)}">忘记</button></div>`).join('')
+    (btIsArmed(d.address) ? `<button class="al-del armed" data-addr="${esc(d.address)}">确认忘记</button></div>`
+                          : `<button class="al-del" data-addr="${esc(d.address)}">忘记</button></div>`)).join('')
     : '<div class="alarm-empty">还没有连过的手机</div>';
   $('btAdd').classList.toggle('on', !!b.window);
   $('btAdd').textContent = b.window ? `停止等待（${b.window} 秒）` : '＋ 添加手机';
 }
+// 「忘记」 needs a second tap within 4 s. Kept by address, not on the button: while 添加手机 waits
+// the list is redrawn every second (the countdown), which would drop a state kept on the DOM.
+let btArmed = null;   // {addr, until}
+const btIsArmed = addr => !!btArmed && btArmed.addr === addr && Date.now() < btArmed.until;
 async function btPost(body) {
   if (DEMO !== null) {
     const b = ui.bluetooth;
@@ -1017,12 +1026,13 @@ $('btAdd').addEventListener('click', () => btPost({ window: !(ui.bluetooth && ui
 $('btList').addEventListener('click', e => {
   const b = e.target.closest('.al-del');
   if (!b) return;
-  if (!b.classList.contains('armed')) {
-    b.classList.add('armed');
-    b.textContent = '确认忘记';
-    setTimeout(() => { b.classList.remove('armed'); b.textContent = '忘记'; }, 4000);
+  if (!btIsArmed(b.dataset.addr)) {
+    btArmed = { addr: b.dataset.addr, until: Date.now() + 4000 };
+    renderBluetooth();
+    setTimeout(renderBluetooth, 4100);
     return;
   }
+  btArmed = null;
   btPost({ remove: b.dataset.addr }).then(r => { if (r && r.ok !== false) toast('已忘记，这台手机要重新配对才能连'); });
 });
 

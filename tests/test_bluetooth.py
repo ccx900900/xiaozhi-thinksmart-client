@@ -104,8 +104,23 @@ def test_target_follows_the_conversation_and_alarms():
     c.ring = {'items': []}
     assert c.background_target() == 0.0
     c.ring = None
-    c.preview = object()
+
+
+class FakeTask:
+    def __init__(self, done):
+        self._done = done
+
+    def done(self):
+        return self._done
+
+
+def test_a_tone_preview_mutes_only_while_it_plays():
+    # it stays in c.preview after playing to its end: the phone's music must come back then
+    c = make_client()
+    c.preview = FakeTask(done=False)
     assert c.background_target() == 0.0
+    c.preview = FakeTask(done=True)
+    assert c.background_target() == 1.0
 
 
 class FakeBt:
