@@ -1007,9 +1007,10 @@ async function btPost(body) {
     if ('enabled' in body) b.enabled = body.enabled;
     if ('window' in body) b.window = body.window ? 180 : 0;
     if (body.remove) b.devices = b.devices.filter(d => d.address !== body.remove);
-    return renderBluetooth();
+    renderBluetooth();
+    return { ok: true };
   }
-  await postJson('/api/bluetooth', body);
+  return postJson('/api/bluetooth', body);   // {ok: false} after it has shown the error
 }
 $('btSwitch').addEventListener('click', () => btPost({ enabled: !(ui.bluetooth && ui.bluetooth.enabled) }));
 $('btAdd').addEventListener('click', () => btPost({ window: !(ui.bluetooth && ui.bluetooth.window) }));
@@ -1022,7 +1023,7 @@ $('btList').addEventListener('click', e => {
     setTimeout(() => { b.classList.remove('armed'); b.textContent = '忘记'; }, 4000);
     return;
   }
-  btPost({ remove: b.dataset.addr }).then(() => toast('已忘记，这台手机要重新配对才能连'));
+  btPost({ remove: b.dataset.addr }).then(r => { if (r && r.ok !== false) toast('已忘记，这台手机要重新配对才能连'); });
 });
 
 
