@@ -576,6 +576,15 @@ function ago(t) {
   const m = Math.max(0, Math.round((Date.now() / 1000 - t) / 60));
   return m < 2 ? '刚刚' : m < 60 ? `${m} 分钟前` : m < 1440 ? `${Math.round(m / 60)} 小时前` : `${Math.round(m / 1440)} 天前`;
 }
+// After an update: the state it left, both versions, whatever this run installed. One tap installs
+// the system layer and then the client, and an older updater keeps only the last one's message
+// (已更新到 0.1.5); the versions themselves are always right.
+function updDoneText(u, job) {
+  const sys = (u || {}).system || {};
+  if (!sys.current || !ui.version) return job.message || '更新完成';
+  return `更新完成：系统层 ${sys.current} · 客户端 ${ui.version}`
+    + (/重启设备后生效/.test(job.message || '') ? '，部分改动重启设备后生效' : '');
+}
 function updParts(u) {
   // what one tap installs, in the updater's order: the system layer (shell, audio...) first
   const parts = [], sys = u.system || {}, sa = sys.available;
@@ -624,7 +633,7 @@ function renderUpdate() {
                           + (p.notes || []).map(n => `<li>${esc(n)}</li>`).join('')).join('');
     label = Date.now() - updArmed < 5000 ? '确认更新' : '更新';
   } else {
-    text = recent && job.state === 'done' ? `${job.message}，已是最新`
+    text = recent && job.state === 'done' ? `${updDoneText(u, job)}，已是最新`
       : failed ? job.message
       : u.check_error ? `${cur}。${u.check_error}`
       : blocked ? `${cur}。${blocked}`
@@ -651,7 +660,7 @@ function updateFinished(job) {
   if (!job || !(job.state === 'done' || job.state === 'rolled_back' || job.state === 'failed')) return;
   if (Date.now() / 1000 - job.time > 300) return;
   try { if (localStorage.getItem('updShown') === String(job.time)) return; localStorage.setItem('updShown', String(job.time)); } catch (e) { /* no storage */ }
-  toast(job.message, job.state === 'done' ? '' : 'error');
+  toast(job.state === 'done' ? updDoneText(ui.update, job) : job.message, job.state === 'done' ? '' : 'error');
 }
 $('updBtn').addEventListener('click', async () => {
   const parts = updParts(ui.update || {});
