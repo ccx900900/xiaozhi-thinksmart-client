@@ -752,10 +752,15 @@ const shell = window.webkit && window.webkit.messageHandlers && window.webkit.me
 const shellWifi = !!(shell && window.thinksmartShell && window.thinksmartShell.wifi);
 const shellCalls = {};
 let shellSeq = 0;
+// The shell answers every command (a connect takes at most ~60 s: three short nmcli calls, a
+// watched activation of at most 50 s, the cleanup); an older shell (the 20261101 image) doesn't when
+// nmcli hangs. Waiting for ever would keep the Wi-Fi panel busy: after this, it counts as failed.
+const SHELL_TIMEOUT = 90000;
 function shellCall(cmd, args) {
   return new Promise(resolve => {
     const id = ++shellSeq;
     shellCalls[id] = resolve;
+    setTimeout(() => window.thinksmartReply({ id, ok: false, reason: 'noreply' }), SHELL_TIMEOUT);
     const msg = Object.assign({ id, cmd }, args || {});
     if (shellWifi) shell.postMessage(JSON.stringify(msg));
     else wifiMock(msg);
@@ -788,6 +793,7 @@ const WIFI_REASONS = {
   password: '密码不对，请再试一次',
   notfound: '找不到这个网络，可能离得太远或名称有误',
   timeout: '连接超时，请靠近路由器后再试',
+  noreply: '设备没有回应，请过一会儿再看看网络状态',
 };
 const WIFI_STAGES = { scan: '正在搜索网络…', join: '正在连接路由器…', auth: '正在验证密码…', ip: '密码正确，正在获取网络地址…' };
 const wifi = { nets: [], target: null, ssid: '', pw: '', showPw: false, busy: false, connectId: null };
@@ -795,7 +801,7 @@ const signalText = s => s > 75 ? '信号很好' : s > 50 ? '信号良好' : s > 
 
 async function renderWifiCard() {
   if (!shellWifi && DEMO === null) {
-    $('wifiSub').textContent = '这台设备的系统层版本较旧，不能在这里切换 WiFi。按系统镜像 README 更新系统层后就可以。';
+    $('wifiSub').textContent = '这台设备的系统层版本较旧，不能在这里切换 WiFi。在上面的「软件更新」里更新系统层后就可以。';
     $('wifiBtn').hidden = true;
     return;
   }
